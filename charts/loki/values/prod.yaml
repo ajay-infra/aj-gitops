@@ -22,10 +22,14 @@ loki:
           period: 24h
 
   storage:
+    # Bucket names overridden by ApplicationSet parameters at deploy time
+    bucketNames:
+      chunks: "loki-chunks-prod"
+      ruler: "loki-ruler-prod"
+      admin: "loki-admin-prod"
     type: s3
     s3:
       region: us-east-1
-      bucketnames: ""  # set via --set
       insecure: false
 
   limits_config:
