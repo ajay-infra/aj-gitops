@@ -22,11 +22,15 @@ loki:
           period: 24h
 
   storage:
+    # Bucket names overridden by ApplicationSet parameters at deploy time
+    # (Terraform creates the buckets and passes names via ArgoCD parameters)
+    bucketNames:
+      chunks: "loki-chunks-nonprod"
+      ruler: "loki-ruler-nonprod"
+      admin: "loki-admin-nonprod"
     type: s3
     s3:
       region: us-east-1
-      # Bucket name injected via ESO from Terraform output
-      bucketnames: ""  # set via --set loki.storage.s3.bucketnames=<bucket>
       insecure: false
     # WAL on local disk for durability between flushes
     wal:

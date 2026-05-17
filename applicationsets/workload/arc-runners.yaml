@@ -1,0 +1,75 @@
+# ApplicationSet — ARC Runner Scale Sets on all workload clusters
+#
+# Deploys one gha-runner-scale-set Helm release per workload cluster.
+# The ARC controller (installed by aj-infra-platform) watches these scale sets
+# and spins up ephemeral runner pods when GitHub Actions jobs are queued.
+#
+# Prerequisites per cluster:
+#   1. ARC controller installed (aj-infra-platform: install_arc = true)
+#   2. ESO ExternalSecret "arc-github-app-secret" in arc-runners namespace
+#      (pulls GitHub App credentials from Secrets Manager)
+#   3. Pod Identity association for arc-runner-<env> service account
+#
+# Workflow usage:
+#   runs-on: [self-hosted, dev]      # targets dev cluster runners
+#   runs-on: [self-hosted, staging]  # targets staging cluster runners
+#   runs-on: [self-hosted, prod]     # targets prod cluster runners (manual gate recommended)
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: arc-runner-sets
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env: "{{metadata.labels.environment}}"
+
+  template:
+    metadata:
+      name: "arc-runners-{{values.env}}-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component: arc-runners
+        cluster: "{{name}}"
+    spec:
+      project: platform
+
+      source:
+        repoURL: https://github.com/ajay-infra/aj-platform-gitops
+        targetRevision: main
+        chart: ""  # not a local chart — use Helm chart from OCI registry below
+
+        # Multi-source: OCI chart + values from this repo
+        helm:
+          releaseName: "arc-runners-{{values.env}}"
+          valueFiles:
+            - "$values/charts/arc-runners/values/{{values.env}}.yaml"
+
+      sources:
+        - repoURL: "oci://ghcr.io/actions/actions-runner-controller-charts"
+          chart: gha-runner-scale-set
+          targetRevision: "0.9.3"
+          helm:
+            releaseName: "arc-runners-{{values.env}}"
+
+        - repoURL: https://github.com/ajay-infra/aj-platform-gitops
+          targetRevision: main
+          ref: values
+
+      destination:
+        server: "{{server}}"
+        namespace: arc-runners
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
