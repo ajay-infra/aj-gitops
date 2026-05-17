@@ -2,12 +2,12 @@ name: CI
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
 
-# Uncomment to enable automatic CI on push/PR
+# Uncomment to enable CI on direct push to main (after branch protection is solid)
 # on:
 #   push:
-#     branches: [main]
-#   pull_request:
 #     branches: [main]
 
 jobs:
