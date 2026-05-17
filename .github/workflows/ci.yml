@@ -72,9 +72,7 @@ jobs:
       - name: Install yamllint
         run: pip install yamllint
       - name: Lint YAML
-        run: |
-          yamllint -d '{extends: relaxed, rules: {line-length: {max: 150}}}' \
-            applicationsets/ bootstrap/ projects/ charts/
+        run: yamllint applicationsets/ bootstrap/ projects/ charts/
 
   validate-appsets:
     name: Validate ApplicationSets
