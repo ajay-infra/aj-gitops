@@ -23,6 +23,9 @@ destinations:
 
 clusterMetrics:
   enabled: true
+
+alloy-metrics:
+  enabled: true
   destinations: [central-mimir]
 
 podLogs:

@@ -30,6 +30,9 @@ destinations:
 
 clusterMetrics:
   enabled: true
+
+alloy-metrics:
+  enabled: true
   destinations: [central-mimir]
   # Tighter scrape interval for prod
   scrapeInterval: 15s
