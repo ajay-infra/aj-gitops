@@ -1,0 +1,75 @@
+# ARC Runner Scale Set — dev cluster
+# Installed by ArgoCD ApplicationSet (applicationsets/workload/arc-runners.yaml)
+# Controller is installed by aj-infra-platform (install_arc = true)
+
+githubConfigUrl: "https://github.com/ajay-infra"
+
+# ESO creates this K8s Secret from Secrets Manager:
+#   secret: arc-github-app-secret
+#   keys:  github_app_id, github_app_installation_id, github_app_private_key
+githubConfigSecret: "arc-github-app-secret"
+
+# Runner label — used in workflow files as: runs-on: [self-hosted, dev]
+runnerScaleSetName: "dev"
+
+minRunners: 0  # scale to zero when idle — cost saving for dev
+maxRunners: 5
+
+template:
+  spec:
+    serviceAccountName: arc-runner-dev  # bound to Pod Identity role via aj-infra-platform
+    initContainers:
+      - name: init-dind-externals
+        image: ghcr.io/actions/actions-runner:2.323.0
+        command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+        volumeMounts:
+          - name: dind-externals
+            mountPath: /home/runner/tmpDir
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:2.323.0
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        env:
+          - name: DOCKER_HOST
+            value: tcp://localhost:2376
+          - name: DOCKER_TLS_VERIFY
+            value: "1"
+          - name: DOCKER_CERT_PATH
+            value: /certs/client
+        volumeMounts:
+          - name: work
+            mountPath: /home/runner/_work
+          - name: dind-cert
+            mountPath: /certs/client
+            readOnly: true
+      - name: dind
+        image: docker:dind
+        args:
+          - dockerd
+          - --host=tcp://0.0.0.0:2376
+          - --tlsverify
+          - --tlscacert=/certs/ca.pem
+          - --tlscert=/certs/server-cert.pem
+          - --tlskey=/certs/server-key.pem
+        securityContext:
+          privileged: true
+        volumeMounts:
+          - name: work
+            mountPath: /home/runner/_work
+          - name: dind-cert
+            mountPath: /certs
+          - name: dind-externals
+            mountPath: /home/runner/externals
+    volumes:
+      - name: work
+        emptyDir: {}
+      - name: dind-cert
+        emptyDir: {}
+      - name: dind-externals
+        emptyDir: {}
