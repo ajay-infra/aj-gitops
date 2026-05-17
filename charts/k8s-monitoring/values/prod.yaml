@@ -4,7 +4,7 @@
 # cluster.name set via ApplicationSet parameter at deploy time
 
 cluster:
-  name: "" # injected via ApplicationSet: ai-search-prod-blue or ai-search-prod-green
+  name: "ai-search-prod-blue" # overridden by ApplicationSet parameter at deploy time
 
 destinations:
   - name: central-mimir
