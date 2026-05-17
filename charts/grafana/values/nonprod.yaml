@@ -1,0 +1,141 @@
+# Grafana — central-nonprod values
+# Chart: grafana/grafana
+# Single-instance — nonprod doesn't need HA Grafana
+
+replicas: 1
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClassName: gp3
+
+# Admin password pulled from Secrets Manager via ESO
+admin:
+  existingSecret: grafana-admin
+  userKey: admin-user
+  passwordKey: admin-password
+
+# GitHub OAuth for UI access
+grafana.ini:
+  server:
+    root_url: https://grafana-nonprod.internal.ai-search.io
+  auth.github:
+    enabled: true
+    client_id: ${GF_AUTH_GITHUB_CLIENT_ID}
+    client_secret: ${GF_AUTH_GITHUB_CLIENT_SECRET}
+    allowed_organizations: ajay-infra
+    allow_sign_up: true
+  auth:
+    disable_login_form: false  # keep form as fallback during bootstrap
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+  log:
+    mode: console
+    level: info
+
+envFromSecret: grafana-env-secrets  # ESO-synced secret with GF_AUTH_GITHUB_* vars
+
+# Data sources — auto-provisioned, pointing to co-located LGTM stack
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Mimir
+        type: prometheus
+        uid: mimir
+        url: http://mimir-nginx.monitoring.svc.cluster.local/prometheus
+        isDefault: true
+        jsonData:
+          httpMethod: POST
+          prometheusType: Mimir
+
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://loki-gateway.monitoring.svc.cluster.local
+        jsonData:
+          maxLines: 5000
+
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        url: http://tempo.monitoring.svc.cluster.local:3100
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: "-1m"
+            spanEndTimeShift: "1m"
+          tracesToMetrics:
+            datasourceUid: mimir
+          serviceMap:
+            datasourceUid: mimir
+          nodeGraph:
+            enabled: true
+
+# Pre-provisioned dashboards from grafana.com + custom
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    # EKS node exporter (via Alloy scrape)
+    node-exporter:
+      gnetId: 1860
+      revision: 37
+      datasource: Mimir
+    # Kubernetes cluster overview
+    k8s-cluster:
+      gnetId: 7249
+      revision: 1
+      datasource: Mimir
+    # Kubernetes namespace resource usage
+    k8s-namespaces:
+      gnetId: 13770
+      revision: 1
+      datasource: Mimir
+    # Loki log volume dashboard
+    loki-logs:
+      gnetId: 13639
+      revision: 2
+      datasource: Loki
+    # Tempo trace dashboard
+    tempo-traces:
+      gnetId: 16098
+      revision: 1
+      datasource: Tempo
+
+ingress:
+  enabled: true
+  ingressClassName: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+  hosts:
+    - grafana-nonprod.internal.ai-search.io
+  tls:
+    - hosts:
+        - grafana-nonprod.internal.ai-search.io
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+serviceAccount:
+  create: true
+  annotations: {}  # Pod Identity association set by pipeline

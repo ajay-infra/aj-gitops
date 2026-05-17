@@ -1,0 +1,51 @@
+# AppProject: platform
+#
+# Owns all platform-layer Applications — ArgoCD itself, LGTM stack, Alloy.
+# Only the infra-lead team can sync platform apps (changes here affect all clusters).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Platform layer — ArgoCD, Grafana LGTM, Alloy
+
+  sourceRepos:
+    - https://github.com/ajay-infra/aj-platform-gitops
+    # Upstream chart repos (ArgoCD Applications use direct Helm sources)
+    - https://argoproj.github.io/argo-helm
+    - https://grafana.github.io/helm-charts
+
+  destinations:
+    - namespace: argocd
+      server: https://kubernetes.default.svc
+    - namespace: monitoring
+      server: https://kubernetes.default.svc
+    # Workload cluster destinations (registered by provision-eks.yml argocd-register stage)
+    - namespace: monitoring
+      server: "*"  # all registered clusters
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  roles:
+    - name: admin
+      description: Full access to platform project
+      policies:
+        - p, proj:platform:admin, applications, *, platform/*, allow
+      groups:
+        - ajay-infra:infra-lead

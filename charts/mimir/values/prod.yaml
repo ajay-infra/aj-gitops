@@ -1,0 +1,166 @@
+# Mimir — central-prod values
+# Chart: grafana/mimir-distributed
+# Mode: read-write (microservices) — separate ingest/query/store paths
+# Stores metrics from prod-blue + prod-green workload clusters
+
+mimir:
+  structuredConfig:
+    common:
+      storage:
+        backend: s3
+        s3:
+          region: us-east-1
+          bucket_name: ""  # set via --set
+
+    ingester:
+      ring:
+        replication_factor: 2  # 2 ingesters for prod
+
+    store_gateway:
+      sharding_ring:
+        replication_factor: 2
+
+    limits:
+      # 1-year metric retention for prod (FinOps + capacity planning history)
+      compactor_blocks_retention_period: 365d
+      max_global_series_per_user: 2000000
+      max_global_series_per_metric: 200000
+      ingestion_rate: 150000
+      ingestion_burst_size: 300000
+      # Query timeout — prevent runaway queries from impacting ingest
+      max_query_lookback: 366d
+      query_timeout: 120s
+
+    ruler:
+      enable_api: true
+
+alertmanager:
+  enabled: false
+
+minio:
+  enabled: false
+
+# Distributed microservices for prod
+distributor:
+  replicas: 2
+  podDisruptionBudget:
+    maxUnavailable: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+ingester:
+  replicas: 2
+  podDisruptionBudget:
+    maxUnavailable: 1  # ingesters hold in-memory metric data — lose both = data gap
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 2000m
+      memory: 8Gi
+  persistentVolume:
+    enabled: true
+    size: 50Gi
+    storageClass: gp3
+
+querier:
+  replicas: 2
+  podDisruptionBudget:
+    maxUnavailable: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+
+query_frontend:
+  replicas: 2
+  podDisruptionBudget:
+    maxUnavailable: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+query_scheduler:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+store_gateway:
+  replicas: 2
+  podDisruptionBudget:
+    maxUnavailable: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+  persistentVolume:
+    enabled: true
+    size: 20Gi
+    storageClass: gp3
+
+compactor:
+  replicas: 1  # compactor is single-threaded by design
+  resources:
+    requests:
+      cpu: 250m
+      memory: 1Gi
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+  persistentVolume:
+    enabled: true
+    size: 20Gi
+    storageClass: gp3
+
+ruler:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+nginx:
+  enabled: true
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+rollout_operator:
+  enabled: true  # prod: managed rollouts for zero-downtime upgrades
+
+metaMonitoring:
+  serviceMonitor:
+    enabled: true
+
+serviceAccount:
+  create: true
+  annotations: {}

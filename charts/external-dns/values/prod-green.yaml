@@ -1,0 +1,51 @@
+# external-dns — prod-green workload cluster (ai-search-prod-green)
+# Chart: external-dns/external-dns
+#
+# txtOwnerId is UNIQUE per cluster — do not reuse across clusters.
+# prod-green gets a distinct txtOwnerId from prod-blue so each cluster
+# independently owns and manages its own set of Route53 A records.
+# During blue/green cutover: both clusters are live simultaneously,
+# each managing records for their own ALB hostnames.
+
+provider:
+  name: aws
+
+aws:
+  region: us-east-1
+  zoneType: private
+
+domainFilters:
+  - internal.ai-search.io
+
+registry: txt
+txtOwnerId: ai-search-prod-green
+
+managedRecordTypes:
+  - A
+  - TXT
+
+policy: upsert-only
+
+sources:
+  - ingress
+  - service
+
+annotationFilter: "external-dns.alpha.kubernetes.io/hostname"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+serviceAccount:
+  create: true
+  name: external-dns
+  annotations: {}
+
+logLevel: info
+logFormat: json
+
+interval: 1m

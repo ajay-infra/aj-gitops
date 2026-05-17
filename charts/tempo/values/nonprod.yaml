@@ -1,0 +1,63 @@
+# Tempo — central-nonprod values
+# Chart: grafana/tempo
+# Mode: single binary — sufficient for trace volume from dev + staging
+
+tempo:
+  reportingEnabled: false
+
+  storage:
+    trace:
+      backend: s3
+      s3:
+        bucket: ""  # set via --set tempo.storage.trace.s3.bucket=<bucket>
+        region: us-east-1
+        insecure: false
+      # WAL on local disk for durability during S3 flushes
+      wal:
+        path: /var/tempo/wal
+
+  retention: 336h  # 14 days for nonprod traces
+
+  # Receivers — accept OTLP from Alloy on workload clusters
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+  # Service graph + span metrics (auto-computed from traces, sent to Mimir)
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://mimir-nginx.monitoring.svc.cluster.local/api/v1/push
+    processors:
+      - service-graphs
+      - span-metrics
+
+  # Query frontend
+  search:
+    enabled: true
+    max_result_limit: 1000
+
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClassName: gp3
+
+replicas: 1
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+serviceAccount:
+  create: true
+  annotations: {}  # Pod Identity: s3:GetObject, s3:PutObject on tempo bucket
+
+serviceMonitor:
+  enabled: true

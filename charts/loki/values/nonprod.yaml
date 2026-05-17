@@ -1,0 +1,91 @@
+# Loki — central-nonprod values
+# Chart: grafana/loki
+# Mode: SingleBinary — one pod, local disk. Simple for nonprod.
+# S3 backend for chunks so state survives pod restarts.
+
+deploymentMode: SingleBinary
+
+loki:
+  auth_enabled: false  # single-tenant (no X-Scope-OrgID needed from Alloy)
+
+  commonConfig:
+    replication_factor: 1  # single binary
+
+  schemaConfig:
+    configs:
+      - from: "2024-01-01"
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+  storage:
+    type: s3
+    s3:
+      region: us-east-1
+      # Bucket name injected via ESO from Terraform output
+      bucketnames: ""  # set via --set loki.storage.s3.bucketnames=<bucket>
+      insecure: false
+    # WAL on local disk for durability between flushes
+    wal:
+      enabled: true
+
+  limits_config:
+    retention_period: 720h  # 30 days for nonprod (dev + staging logs)
+    ingestion_rate_mb: 16
+    ingestion_burst_size_mb: 32
+    max_query_parallelism: 8
+    max_entries_limit_per_query: 50000
+
+  # Ruler disabled for nonprod — no alerting rules via Loki
+  ruler:
+    enabled: false
+
+singleBinary:
+  replicas: 1
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClassName: gp3
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# Disable all distributed components
+read:
+  replicas: 0
+write:
+  replicas: 0
+backend:
+  replicas: 0
+
+# Gateway — Nginx proxy for push/query endpoints
+gateway:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# ServiceMonitor for Loki's own metrics (scraped by Alloy)
+monitoring:
+  serviceMonitor:
+    enabled: true
+  selfMonitoring:
+    enabled: false  # avoids circular dependency on Loki itself
+  lokiCanary:
+    enabled: false
+
+serviceAccount:
+  create: true
+  annotations: {}  # Pod Identity: s3:GetObject, s3:PutObject on loki chunks bucket

@@ -1,0 +1,130 @@
+name: Install Argo Rollouts
+
+# Installs or upgrades Argo Rollouts on a workload cluster via Helm.
+# Argo Rollouts enables pod-level canary and blue-green deployments.
+# Devs define Rollout objects in k8s-manifests instead of Deployment.
+#
+# Run this after provision-eks.yml for each workload cluster.
+# Re-run with action: upgrade to bump the chart version.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Workload cluster environment"
+        required: true
+        type: choice
+        options: [dev, staging, prod]
+      color:
+        description: "Cluster color (prod only — ignored for dev/staging)"
+        required: false
+        type: choice
+        options: [blue, green]
+        default: blue
+      action:
+        description: "Action"
+        required: true
+        type: choice
+        options: [install, upgrade]
+        default: install
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ROLLOUTS_NAMESPACE: argo-rollouts
+  ROLLOUTS_CHART_VERSION: "2.38.0"
+  ROLLOUTS_CHART_REPO: https://argoproj.github.io/argo-helm
+
+jobs:
+  install-argo-rollouts:
+    name: Argo Rollouts — ${{ inputs.environment }}${{ inputs.environment == 'prod' && format('-{0}', inputs.color) || '' }} / ${{ inputs.action }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve cluster name
+        id: cluster
+        run: |
+          ENV="${{ inputs.environment }}"
+          COLOR="${{ inputs.color }}"
+          if [ "$ENV" == "prod" ]; then
+            CLUSTER_NAME="ai-search-prod-${COLOR}"
+          else
+            CLUSTER_NAME="ai-search-${ENV}"
+          fi
+          echo "name=${CLUSTER_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Configure kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --name "${{ steps.cluster.outputs.name }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --kubeconfig /tmp/workload.kubeconfig
+          echo "KUBECONFIG=/tmp/workload.kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Verify cluster connectivity
+        run: kubectl cluster-info
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: "3.16.3"
+
+      - name: Add Argo Helm repo
+        run: |
+          helm repo add argo ${{ env.ROLLOUTS_CHART_REPO }}
+          helm repo update
+
+      - name: Create namespace
+        run: |
+          kubectl create namespace ${{ env.ROLLOUTS_NAMESPACE }} --dry-run=client -o yaml \
+            | kubectl apply -f -
+
+      - name: Resolve values file
+        id: values
+        run: |
+          ENV="${{ inputs.environment }}"
+          # prod-blue and prod-green share the same values file
+          if [ "$ENV" == "prod" ]; then
+            echo "file=charts/argo-rollouts/values/prod.yaml" >> "$GITHUB_OUTPUT"
+          else
+            echo "file=charts/argo-rollouts/values/${ENV}.yaml" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Helm install / upgrade Argo Rollouts
+        run: |
+          helm upgrade --install argo-rollouts argo/argo-rollouts \
+            --version "${{ env.ROLLOUTS_CHART_VERSION }}" \
+            --namespace "${{ env.ROLLOUTS_NAMESPACE }}" \
+            --values "${{ steps.values.outputs.file }}" \
+            --wait \
+            --timeout 5m \
+            --atomic
+
+      - name: Verify rollout controller is ready
+        run: |
+          kubectl rollout status deployment/argo-rollouts \
+            -n "${{ env.ROLLOUTS_NAMESPACE }}" \
+            --timeout=3m
+
+      - name: Print summary
+        run: |
+          echo ""
+          echo "Argo Rollouts installed on ${{ steps.cluster.outputs.name }}"
+          echo ""
+          echo "Devs: use Rollout CRD instead of Deployment for canary/blue-green"
+          echo "Docs: https://argoproj.github.io/argo-rollouts/"
+          echo ""
+          echo "Dashboard (port-forward to access):"
+          echo "  kubectl port-forward svc/argo-rollouts-dashboard 3100:3100 -n ${{ env.ROLLOUTS_NAMESPACE }}"
+          echo "  open http://localhost:3100/rollouts"

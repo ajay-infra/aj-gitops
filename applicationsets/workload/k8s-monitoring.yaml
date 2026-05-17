@@ -1,0 +1,66 @@
+# ApplicationSet — k8s-monitoring on all workload clusters
+#
+# Deploys grafana/k8s-monitoring (includes Alloy) to every ArgoCD-registered
+# workload cluster. Ships metrics → central Mimir, logs → central Loki,
+# traces → central Tempo over VPC peering.
+#
+# Cluster Secrets are created by the argocd-register stage in provision-eks.yml
+# with labels:
+#   tier: workload
+#   environment: dev | staging | prod
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-k8s-monitoring
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          valuesFile: "charts/k8s-monitoring/values/{{metadata.labels.environment}}.yaml"
+
+  template:
+    metadata:
+      name: "k8s-monitoring-{{name}}"
+      namespace: argocd
+    spec:
+      project: platform
+
+      sources:
+        - repoURL: https://grafana.github.io/helm-charts
+          chart: k8s-monitoring
+          targetRevision: "2.0.2"
+          helm:
+            releaseName: k8s-monitoring
+            valueFiles:
+              - $values/{{values.valuesFile}}
+            # Inject cluster name for prod (blue vs green distinguish themselves)
+            parameters:
+              - name: cluster.name
+                value: "{{name}}"
+
+        - repoURL: https://github.com/ajay-infra/aj-platform-gitops
+          targetRevision: main
+          ref: values
+
+      destination:
+        server: "{{server}}"
+        namespace: monitoring
+
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 2m

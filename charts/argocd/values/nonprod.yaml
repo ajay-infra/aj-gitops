@@ -1,0 +1,168 @@
+# ArgoCD — central-nonprod values
+# Chart: argo/argo-cd
+# Manages: dev + staging workload clusters
+
+global:
+  domain: argocd-nonprod.internal.ai-search.io
+
+configs:
+  cm:
+    # GitHub OIDC for UI login
+    oidc.config: |
+      name: GitHub
+      issuer: https://token.actions.githubusercontent.com
+      clientID: $oidc-secret:client-id
+      clientSecret: $oidc-secret:client-secret
+      requestedScopes:
+        - read:org
+        - user:email
+    # Resource tracking via annotation (not label) — avoids label conflicts with Karpenter
+    application.resourceTrackingMethod: annotation
+    # Sync timeout
+    timeout.reconciliation: 180s
+
+  rbac:
+    policy.csv: |
+      # infra-core team: admin on dev + staging projects
+      g, ajay-infra:infra-core, role:admin
+      # readonly for all other org members
+      g, ajay-infra:engineers, role:readonly
+    policy.default: role:readonly
+
+  params:
+    # Server-side apply — handles CRDs and large manifests better
+    server.enable.gzip: "true"
+    application.namespaces: "argocd"
+
+server:
+  replicas: 1  # nonprod: single replica is fine
+  # PDB: nonprod has 1 replica — PDB would block all evictions, so disabled
+  # (single replica clusters accept brief unavailability during node drain)
+  podDisruptionBudget:
+    enabled: false
+
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internal
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/certificate-arn: ""  # set via ESO from ACM output
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/backend-protocol: HTTPS
+    hosts:
+      - argocd-nonprod.internal.ai-search.io
+    tls:
+      - hosts:
+          - argocd-nonprod.internal.ai-search.io
+
+repoServer:
+  replicas: 1
+  podDisruptionBudget:
+    enabled: false
+
+  # Argo Rollouts UI plugin — shows canary status + promote/abort buttons in ArgoCD UI
+  extensions:
+    enabled: true
+    contents:
+      - name: argo-rollouts
+        url: https://github.com/argoproj-labs/rollout-extension/releases/download/v0.3.6/extension.tar
+
+  # ksops plugin — decrypts SOPS-encrypted Helm values at render time
+  volumes:
+    - name: custom-tools
+      emptyDir: {}
+    - name: sops-age
+      secret:
+        secretName: sops-age-key  # created by ESO from Secrets Manager
+
+  initContainers:
+    - name: install-ksops
+      image: viaductoss/ksops:v4.3.2
+      command: ["/bin/sh", "-c"]
+      args:
+        - cp /usr/local/bin/ksops /custom-tools/ && cp /usr/local/bin/kustomize /custom-tools/
+      volumeMounts:
+        - name: custom-tools
+          mountPath: /custom-tools
+
+  volumeMounts:
+    - name: custom-tools
+      mountPath: /usr/local/bin/ksops
+      subPath: ksops
+    - name: sops-age
+      mountPath: /home/argocd/.config/sops/age
+      readOnly: true
+
+  env:
+    - name: SOPS_AGE_KEY_FILE
+      value: /home/argocd/.config/sops/age/keys.txt
+    - name: XDG_CONFIG_HOME
+      value: /home/argocd/.config
+
+  # Pod Identity — ArgoCD repo-server needs KMS decrypt for SOPS
+  serviceAccount:
+    annotations: {}  # Pod Identity association set via aj-infra-release pipeline
+
+applicationSet:
+  replicas: 1
+  podDisruptionBudget:
+    enabled: false
+
+controller:
+  replicas: 1
+  podDisruptionBudget:
+    enabled: false
+
+redis:
+  enabled: true  # single-node Redis for nonprod (not HA)
+
+redis-ha:
+  enabled: false
+
+notifications:
+  enabled: true
+  secret:
+    create: false  # secret created via ESO
+  # Slack notifications for sync failures and manual sync gates
+  cm:
+    service.slack: |
+      token: $slack-token
+    template.app-sync-failed: |
+      message: |
+        *{{.app.metadata.name}}* sync failed in *{{.app.spec.destination.namespace}}*
+        Error: {{range .app.status.conditions}}{{.message}}{{end}}
+    trigger.on-sync-failed: |
+      - when: app.status.sync.status == 'Error'
+        send: [app-sync-failed]
+
+# Resource limits — nonprod is sized modestly (m7i.xlarge × 2 nodes)
+resources:
+  server:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  repoServer:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  applicationSet:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  controller:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi

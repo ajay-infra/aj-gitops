@@ -1,0 +1,83 @@
+# ApplicationSet — LGTM stack on central-prod
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: central-prod-platform
+  namespace: argocd
+spec:
+  generators:
+    - list:
+        elements:
+          - component: grafana
+            chart: grafana
+            repoURL: https://grafana.github.io/helm-charts
+            version: "8.8.4"
+            namespace: monitoring
+            valuesFile: charts/grafana/values/prod.yaml
+
+          - component: loki
+            chart: loki
+            repoURL: https://grafana.github.io/helm-charts
+            version: "6.24.0"
+            namespace: monitoring
+            valuesFile: charts/loki/values/prod.yaml
+
+          - component: mimir
+            chart: mimir-distributed
+            repoURL: https://grafana.github.io/helm-charts
+            version: "5.5.1"
+            namespace: monitoring
+            valuesFile: charts/mimir/values/prod.yaml
+
+          - component: tempo
+            chart: tempo
+            repoURL: https://grafana.github.io/helm-charts
+            version: "1.14.0"
+            namespace: monitoring
+            valuesFile: charts/tempo/values/prod.yaml
+
+  template:
+    metadata:
+      name: "central-prod-{{component}}"
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-options: "Prune=false"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL: "{{repoURL}}"
+          chart: "{{chart}}"
+          targetRevision: "{{version}}"
+          helm:
+            releaseName: "{{component}}"
+            valueFiles:
+              - $values/{{valuesFile}}
+
+        - repoURL: https://github.com/ajay-infra/aj-platform-gitops
+          targetRevision: main
+          ref: values
+
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: "{{namespace}}"
+
+      syncPolicy:
+        # Prod: no auto-sync for platform components — manual approval required
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 30s
+            factor: 2
+            maxDuration: 5m
+
+      ignoreDifferences:
+        - group: apps
+          kind: Deployment
+          jsonPointers:
+            - /spec/template/metadata/annotations/checksum~1config

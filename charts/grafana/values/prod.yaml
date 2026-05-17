@@ -1,0 +1,138 @@
+# Grafana — central-prod values
+# Chart: grafana/grafana
+
+replicas: 2  # HA for prod
+podDisruptionBudget:
+  minAvailable: 1
+
+persistence:
+  enabled: true
+  size: 20Gi
+  storageClassName: gp3
+
+admin:
+  existingSecret: grafana-admin
+  userKey: admin-user
+  passwordKey: admin-password
+
+grafana.ini:
+  server:
+    root_url: https://grafana-prod.internal.ai-search.io
+  auth.github:
+    enabled: true
+    client_id: ${GF_AUTH_GITHUB_CLIENT_ID}
+    client_secret: ${GF_AUTH_GITHUB_CLIENT_SECRET}
+    allowed_organizations: ajay-infra
+    # Restrict prod Grafana to infra-lead only
+    allowed_teams: ajay-infra/infra-lead
+    allow_sign_up: false
+  auth:
+    disable_login_form: false
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+  log:
+    mode: console
+    level: warn
+  # Session DB — SQLite is fine for 2 replicas behind ALB with sticky sessions
+  database:
+    type: sqlite3
+
+envFromSecret: grafana-env-secrets
+
+datasources:
+  datasources.yaml:
+    apiVersion: 1
+    datasources:
+      - name: Mimir
+        type: prometheus
+        uid: mimir
+        url: http://mimir-nginx.monitoring.svc.cluster.local/prometheus
+        isDefault: true
+        jsonData:
+          httpMethod: POST
+          prometheusType: Mimir
+
+      - name: Loki
+        type: loki
+        uid: loki
+        url: http://loki-gateway.monitoring.svc.cluster.local
+        jsonData:
+          maxLines: 5000
+
+      - name: Tempo
+        type: tempo
+        uid: tempo
+        url: http://tempo.monitoring.svc.cluster.local:3100
+        jsonData:
+          tracesToLogsV2:
+            datasourceUid: loki
+            spanStartTimeShift: "-1m"
+            spanEndTimeShift: "1m"
+          tracesToMetrics:
+            datasourceUid: mimir
+          serviceMap:
+            datasourceUid: mimir
+          nodeGraph:
+            enabled: true
+
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+      - name: default
+        orgId: 1
+        folder: ""
+        type: file
+        disableDeletion: true  # prod: no UI edits — changes via git
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards/default
+
+dashboards:
+  default:
+    node-exporter:
+      gnetId: 1860
+      revision: 37
+      datasource: Mimir
+    k8s-cluster:
+      gnetId: 7249
+      revision: 1
+      datasource: Mimir
+    k8s-namespaces:
+      gnetId: 13770
+      revision: 1
+      datasource: Mimir
+    loki-logs:
+      gnetId: 13639
+      revision: 2
+      datasource: Loki
+    tempo-traces:
+      gnetId: 16098
+      revision: 1
+      datasource: Tempo
+
+ingress:
+  enabled: true
+  ingressClassName: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internal
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+  hosts:
+    - grafana-prod.internal.ai-search.io
+  tls:
+    - hosts:
+        - grafana-prod.internal.ai-search.io
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+serviceAccount:
+  create: true
+  annotations: {}

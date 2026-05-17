@@ -1,0 +1,182 @@
+# ArgoCD — central-prod values
+# Chart: argo/argo-cd
+# Manages: prod-blue + prod-green workload clusters
+
+global:
+  domain: argocd-prod.internal.ai-search.io
+
+configs:
+  cm:
+    oidc.config: |
+      name: GitHub
+      issuer: https://token.actions.githubusercontent.com
+      clientID: $oidc-secret:client-id
+      clientSecret: $oidc-secret:client-secret
+      requestedScopes:
+        - read:org
+        - user:email
+    application.resourceTrackingMethod: annotation
+    timeout.reconciliation: 180s
+    # Require manual sync approval for prod — no auto-sync
+    resource.customizations.health.argoproj.io/Application: |
+      hs = {}
+      hs.status = "Progressing"
+      hs.message = "Waiting for sync approval"
+      return hs
+
+  rbac:
+    policy.csv: |
+      # infra-lead only can sync prod
+      g, ajay-infra:infra-lead, role:admin
+      # infra-core: view + manual sync on staging, readonly on prod
+      g, ajay-infra:infra-core, role:readonly
+      p, role:infra-core, applications, sync, prod/*, deny
+    policy.default: role:readonly
+
+  params:
+    server.enable.gzip: "true"
+    application.namespaces: "argocd"
+
+server:
+  replicas: 2  # prod: HA
+  # PDB: ensures at least 1 ArgoCD server stays up during node drain
+  # Critical — ArgoCD server down = no UI, no webhook triggers, no sync API
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  ingress:
+    enabled: true
+    ingressClassName: alb
+    annotations:
+      alb.ingress.kubernetes.io/scheme: internal
+      alb.ingress.kubernetes.io/target-type: ip
+      alb.ingress.kubernetes.io/certificate-arn: ""
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+      alb.ingress.kubernetes.io/backend-protocol: HTTPS
+    hosts:
+      - argocd-prod.internal.ai-search.io
+    tls:
+      - hosts:
+          - argocd-prod.internal.ai-search.io
+
+repoServer:
+  replicas: 2
+  # PDB: repo-server down = no manifest rendering, no sync possible
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+  # Argo Rollouts UI plugin — shows canary status + promote/abort buttons in ArgoCD UI
+  extensions:
+    enabled: true
+    contents:
+      - name: argo-rollouts
+        url: https://github.com/argoproj-labs/rollout-extension/releases/download/v0.3.6/extension.tar
+
+  volumes:
+    - name: custom-tools
+      emptyDir: {}
+    - name: sops-age
+      secret:
+        secretName: sops-age-key
+
+  initContainers:
+    - name: install-ksops
+      image: viaductoss/ksops:v4.3.2
+      command: ["/bin/sh", "-c"]
+      args:
+        - cp /usr/local/bin/ksops /custom-tools/ && cp /usr/local/bin/kustomize /custom-tools/
+      volumeMounts:
+        - name: custom-tools
+          mountPath: /custom-tools
+
+  volumeMounts:
+    - name: custom-tools
+      mountPath: /usr/local/bin/ksops
+      subPath: ksops
+    - name: sops-age
+      mountPath: /home/argocd/.config/sops/age
+      readOnly: true
+
+  env:
+    - name: SOPS_AGE_KEY_FILE
+      value: /home/argocd/.config/sops/age/keys.txt
+    - name: XDG_CONFIG_HOME
+      value: /home/argocd/.config
+
+  serviceAccount:
+    annotations: {}
+
+applicationSet:
+  replicas: 2
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+controller:
+  replicas: 1  # ArgoCD controller is not horizontally scalable (sharded only)
+  # PDB disabled — single replica, PDB would block all node drains
+  podDisruptionBudget:
+    enabled: false
+
+# Redis HA for prod
+redis:
+  enabled: false
+
+redis-ha:
+  enabled: true
+  haproxy:
+    enabled: true
+    replicas: 2
+
+notifications:
+  enabled: true
+  secret:
+    create: false
+  cm:
+    service.slack: |
+      token: $slack-token
+    template.app-sync-failed: |
+      message: |
+        *[PROD]* *{{.app.metadata.name}}* sync failed
+        Error: {{range .app.status.conditions}}{{.message}}{{end}}
+    template.app-deployed: |
+      message: |
+        *[PROD]* *{{.app.metadata.name}}* deployed successfully :white_check_mark:
+    trigger.on-sync-failed: |
+      - when: app.status.sync.status == 'Error'
+        send: [app-sync-failed]
+    trigger.on-sync-succeeded: |
+      - when: app.status.sync.status == 'Synced'
+        send: [app-deployed]
+
+resources:
+  server:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  repoServer:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  applicationSet:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+  controller:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: 2000m
+      memory: 4Gi

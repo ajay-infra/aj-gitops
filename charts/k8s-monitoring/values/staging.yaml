@@ -1,0 +1,50 @@
+# k8s-monitoring — staging workload cluster
+# Chart: grafana/k8s-monitoring
+# Ships to central-nonprod (same central cluster as dev)
+
+cluster:
+  name: ai-search-staging
+
+destinations:
+  - name: central-mimir
+    type: prometheus
+    url: http://mimir-nginx.monitoring.central-nonprod.svc.cluster.local/api/v1/push
+
+  - name: central-loki
+    type: loki
+    url: http://loki-gateway.monitoring.central-nonprod.svc.cluster.local/loki/api/v1/push
+
+  - name: central-tempo
+    type: otlp
+    url: http://tempo.monitoring.central-nonprod.svc.cluster.local:4317
+    protocol: grpc
+    tls:
+      insecure: true
+
+clusterMetrics:
+  enabled: true
+  destinations: [central-mimir]
+
+podLogs:
+  enabled: true
+  destinations: [central-loki]
+
+traces:
+  enabled: true
+  destinations: [central-tempo]
+
+kube-state-metrics:
+  enabled: true
+
+node-exporter:
+  enabled: true
+
+alloy:
+  alloy:
+    resources:
+      requests:
+        cpu: 150m
+        memory: 384Mi
+      limits:
+        cpu: 500m
+        memory: 768Mi

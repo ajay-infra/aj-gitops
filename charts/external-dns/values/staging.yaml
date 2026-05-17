@@ -1,0 +1,47 @@
+# external-dns — staging workload cluster (ai-search-staging)
+# Chart: external-dns/external-dns
+#
+# txtOwnerId is UNIQUE per cluster — do not reuse across clusters.
+
+provider:
+  name: aws
+
+aws:
+  region: us-east-1
+  zoneType: private
+
+domainFilters:
+  - internal.ai-search.io
+
+registry: txt
+txtOwnerId: ai-search-staging
+
+managedRecordTypes:
+  - A
+  - TXT
+
+policy: sync
+
+sources:
+  - ingress
+  - service
+
+annotationFilter: "external-dns.alpha.kubernetes.io/hostname"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+serviceAccount:
+  create: true
+  name: external-dns
+  annotations: {}
+
+logLevel: info
+logFormat: json
+
+interval: 1m

@@ -1,0 +1,55 @@
+# external-dns — prod-blue workload cluster (ai-search-prod-blue)
+# Chart: external-dns/external-dns
+#
+# txtOwnerId is UNIQUE per cluster — do not reuse across clusters.
+# prod-blue and prod-green have different txtOwnerId values so they
+# independently track their own A records in Route53.
+#
+# policy: upsert-only for prod — external-dns will create and update records
+# but will NOT delete them. Prevents accidental record removal if a deployment
+# is temporarily scaled down or an Ingress is briefly missing.
+# Manual cleanup required when decommissioning prod services.
+
+provider:
+  name: aws
+
+aws:
+  region: us-east-1
+  zoneType: private
+
+domainFilters:
+  - internal.ai-search.io
+
+registry: txt
+txtOwnerId: ai-search-prod-blue
+
+managedRecordTypes:
+  - A
+  - TXT
+
+# upsert-only for prod: creates + updates, never deletes
+policy: upsert-only
+
+sources:
+  - ingress
+  - service
+
+annotationFilter: "external-dns.alpha.kubernetes.io/hostname"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+serviceAccount:
+  create: true
+  name: external-dns
+  annotations: {}
+
+logLevel: info
+logFormat: json
+
+interval: 1m

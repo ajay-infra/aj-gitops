@@ -1,0 +1,144 @@
+name: Bootstrap ArgoCD
+
+# Installs or upgrades ArgoCD on a central cluster via Helm.
+# Run this ONCE after provision-central.yml completes for a given tier.
+# After ArgoCD is running, apply bootstrap/<tier>.yaml to hand off to GitOps.
+#
+# Subsequent ArgoCD version upgrades are handled by ArgoCD itself (self-managed)
+# via the version pin in applicationsets/central/<tier>/lgtm.yaml.
+#
+# Run order:
+#   1. provision-central.yml (vpc + eks)
+#   2. This workflow (helm install ArgoCD + apply bootstrap)
+#   3. ArgoCD takes over — everything else via GitOps
+
+on:
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "Central cluster tier"
+        required: true
+        type: choice
+        options: [nonprod, prod]
+      action:
+        description: "Action"
+        required: true
+        type: choice
+        options: [install, upgrade, bootstrap-only]
+        default: install
+        # install      → helm upgrade --install + apply bootstrap manifest
+        # upgrade      → helm upgrade only (ArgoCD already running, bump chart version)
+        # bootstrap-only → skip helm, just apply bootstrap/<tier>.yaml (re-apply idempotent)
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+  ARGOCD_NAMESPACE: argocd
+  ARGOCD_CHART_VERSION: "7.7.11"
+  ARGOCD_CHART_REPO: https://argoproj.github.io/argo-helm
+
+jobs:
+  bootstrap-argocd:
+    name: Bootstrap ArgoCD — central-${{ inputs.tier }}
+    runs-on: ubuntu-latest
+    environment: central-${{ inputs.tier }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CENTRAL_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configure kubeconfig
+        run: |
+          CLUSTER_NAME="ai-search-central-${{ inputs.tier }}"
+          aws eks update-kubeconfig \
+            --name "$CLUSTER_NAME" \
+            --region "${{ env.AWS_REGION }}" \
+            --kubeconfig /tmp/central.kubeconfig
+          echo "KUBECONFIG=/tmp/central.kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Verify cluster connectivity
+        run: kubectl cluster-info
+
+      - uses: azure/setup-helm@v4
+        if: inputs.action != 'bootstrap-only'
+        with:
+          version: "3.16.3"
+
+      - name: Add ArgoCD Helm repo
+        if: inputs.action != 'bootstrap-only'
+        run: |
+          helm repo add argo ${{ env.ARGOCD_CHART_REPO }}
+          helm repo update
+
+      - name: Create argocd namespace
+        if: inputs.action != 'bootstrap-only'
+        run: |
+          kubectl create namespace ${{ env.ARGOCD_NAMESPACE }} --dry-run=client -o yaml \
+            | kubectl apply -f -
+
+      - name: Helm install / upgrade ArgoCD
+        if: inputs.action != 'bootstrap-only'
+        run: |
+          helm upgrade --install argocd argo/argo-cd \
+            --version "${{ env.ARGOCD_CHART_VERSION }}" \
+            --namespace "${{ env.ARGOCD_NAMESPACE }}" \
+            --values "charts/argocd/values/${{ inputs.tier }}.yaml" \
+            --wait \
+            --timeout 10m \
+            --atomic
+
+      - name: Wait for ArgoCD to be ready
+        if: inputs.action != 'bootstrap-only'
+        run: |
+          echo "Waiting for ArgoCD server..."
+          kubectl rollout status deployment/argocd-server \
+            -n "${{ env.ARGOCD_NAMESPACE }}" \
+            --timeout=5m
+
+          echo "Waiting for ArgoCD application controller..."
+          kubectl rollout status statefulset/argocd-application-controller \
+            -n "${{ env.ARGOCD_NAMESPACE }}" \
+            --timeout=5m
+
+          echo "Waiting for repo server..."
+          kubectl rollout status deployment/argocd-repo-server \
+            -n "${{ env.ARGOCD_NAMESPACE }}" \
+            --timeout=5m
+
+      - name: Apply bootstrap manifest
+        if: inputs.action == 'install' || inputs.action == 'bootstrap-only'
+        run: |
+          # Create platform AppProject first — bootstrap Application references it
+          kubectl apply -f projects/platform.yaml
+          kubectl apply -f projects/workloads.yaml
+
+          # Apply the bootstrap Application — ArgoCD syncs the rest from git
+          kubectl apply -f bootstrap/${{ inputs.tier }}.yaml
+
+          echo ""
+          echo "Bootstrap applied. ArgoCD will now sync:"
+          echo "  applicationsets/central/${{ inputs.tier }}/lgtm.yaml"
+          echo ""
+          echo "Monitor sync status:"
+          echo "  kubectl get applications -n argocd"
+
+      - name: Print ArgoCD initial admin password
+        if: inputs.action == 'install'
+        run: |
+          echo ""
+          echo "Initial ArgoCD admin password (change after first login):"
+          kubectl get secret argocd-initial-admin-secret \
+            -n "${{ env.ARGOCD_NAMESPACE }}" \
+            -o jsonpath='{.data.password}' | base64 -d
+          echo ""
+          echo ""
+          echo "ArgoCD URL: https://argocd-${{ inputs.tier }}.internal.ai-search.io"
+          echo "(requires Client VPN to reach internal ALB)"

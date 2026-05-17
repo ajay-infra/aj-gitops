@@ -1,0 +1,33 @@
+# Argo Rollouts — dev workload cluster
+# Chart: argo/argo-rollouts
+
+controller:
+  replicas: 1  # dev: single replica is fine
+
+  # Enable metrics so Alloy/k8s-monitoring can scrape rollout progression
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# Dashboard — lets devs visualize canary progress without kubectl
+dashboard:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  service:
+    type: ClusterIP  # accessed via kubectl port-forward or internal ingress

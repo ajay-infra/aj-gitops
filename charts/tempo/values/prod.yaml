@@ -1,0 +1,64 @@
+# Tempo — central-prod values
+# Chart: grafana/tempo
+# Mode: single binary — trace volume from prod-blue + prod-green
+# Distributed Tempo is only needed at very high trace volume (>10k spans/sec)
+
+tempo:
+  reportingEnabled: false
+
+  storage:
+    trace:
+      backend: s3
+      s3:
+        bucket: ""  # set via --set
+        region: us-east-1
+        insecure: false
+      wal:
+        path: /var/tempo/wal
+
+  retention: 720h  # 30 days for prod traces
+
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+
+  metricsGenerator:
+    enabled: true
+    remoteWriteUrl: http://mimir-nginx.monitoring.svc.cluster.local/api/v1/push
+    processors:
+      - service-graphs
+      - span-metrics
+
+  search:
+    enabled: true
+    max_result_limit: 5000
+
+  # Rate limiting for prod — prevent trace floods from impacting storage
+  ingestion_rate_limit_bytes: 20000000   # 20MB/s global
+  ingestion_burst_size_bytes: 40000000   # 40MB burst
+
+persistence:
+  enabled: true
+  size: 50Gi
+  storageClassName: gp3
+
+replicas: 1  # scale to 2 if single binary becomes a bottleneck
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+
+serviceAccount:
+  create: true
+  annotations: {}
+
+serviceMonitor:
+  enabled: true

@@ -1,0 +1,45 @@
+# Bootstrap — central-nonprod
+#
+# This is the ONLY manifest you apply manually after provisioning the central cluster.
+# Everything else is managed by ArgoCD once this is in place.
+#
+# Apply with:
+#   kubectl apply -f bootstrap/nonprod.yaml
+#
+# ArgoCD then picks up:
+#   applicationsets/central/nonprod/  → installs LGTM stack on central-nonprod
+#   applicationsets/workload/          → manages dev + staging workload clusters
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap-central-nonprod
+  namespace: argocd
+  # Keep this Application even if it appears "empty" — it drives everything else
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL: https://github.com/ajay-infra/aj-platform-gitops
+    targetRevision: main
+    path: applicationsets/central/nonprod
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m

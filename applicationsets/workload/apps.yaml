@@ -1,0 +1,87 @@
+# ApplicationSet — Application workloads across all workload clusters
+#
+# Matrix generator: clusters × app components
+# Generates one Application per (cluster, component) pair.
+# Manifests live in k8s-manifests repo, organized by component + environment.
+#
+# Sync policy: auto-sync for dev/staging, manual gate for prod.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-apps
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          # All registered workload clusters
+          - clusters:
+              selector:
+                matchLabels:
+                  tier: workload
+              values:
+                env: "{{metadata.labels.environment}}"
+                # Determine sync policy from environment label
+                autoSync: "{{metadata.labels.auto_sync}}"  # set true on dev/staging cluster secrets
+
+          # App components to deploy on every cluster
+          - list:
+              elements:
+                - component: frontend
+                  namespace: frontend
+                  path: "apps/frontend"
+
+                - component: backend
+                  namespace: backend
+                  path: "apps/backend"
+
+                - component: llm-router
+                  namespace: llm
+                  path: "apps/llm-router"
+
+                - component: searxng
+                  namespace: search
+                  path: "apps/searxng"
+
+                - component: rag-worker
+                  namespace: backend
+                  path: "apps/rag-worker"
+
+  template:
+    metadata:
+      name: "{{values.env}}-{{component}}-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component: "{{component}}"
+        cluster: "{{name}}"
+    spec:
+      project: workloads
+
+      source:
+        repoURL: https://github.com/ajay-infra/k8s-manifests
+        targetRevision: main
+        path: "{{path}}/overlays/{{values.env}}"
+
+      destination:
+        server: "{{server}}"
+        namespace: "{{namespace}}"
+
+      syncPolicy:
+        # dev + staging: auto-sync. prod: manual.
+        # Controlled by cluster Secret label auto_sync=true|false set during argocd-register.
+        automated:
+          prune: "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true  # delete old resources only after new ones are healthy
+        retry:
+          limit: 3
+          backoff:
+            duration: 30s
+            factor: 2
+            maxDuration: 5m

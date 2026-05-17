@@ -1,0 +1,66 @@
+# external-dns — dev workload cluster (ai-search-dev)
+# Chart: external-dns/external-dns
+#
+# txtOwnerId is UNIQUE per cluster — do not reuse across clusters.
+# It is embedded in TXT records that external-dns writes to Route53.
+# If two clusters share the same txtOwnerId they will fight over record ownership.
+#
+# Managed record types: A and TXT only.
+#   A   — actual DNS record pointing to ALB/EIP
+#   TXT — ownership record written by external-dns alongside each A record
+#   No CNAME — blue/green cutover uses CNAME flip at CloudFront level, not here.
+#   No AAAA — IPv6 not in scope.
+
+provider:
+  name: aws
+
+aws:
+  region: us-east-1
+  # Pod Identity supplies credentials — no IRSA annotation needed
+  zoneType: private  # internal.ai-search.io is a private hosted zone
+
+# Only manage records under our internal domain
+domainFilters:
+  - internal.ai-search.io
+
+# TXT registry — external-dns writes a TXT record alongside every A record
+# to track what it owns. Ownership key is txtOwnerId.
+registry: txt
+txtOwnerId: ai-search-dev
+
+# Limit to A and TXT — explicitly block all other record types
+managedRecordTypes:
+  - A
+  - TXT
+
+# sync: external-dns creates AND removes records when Ingress/Service is deleted
+policy: sync
+
+# Watch both Ingress and Service (type: LoadBalancer) objects
+sources:
+  - ingress
+  - service
+
+# Only process resources that have the external-dns annotation
+# (prevents external-dns from accidentally managing untagged services)
+annotationFilter: "external-dns.alpha.kubernetes.io/hostname"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+serviceAccount:
+  create: true
+  name: external-dns
+  # No IRSA annotation — Pod Identity association is created in aj-tf-module-eks
+  annotations: {}
+
+logLevel: info
+logFormat: json
+
+# Interval between full reconciliation loops
+interval: 1m
