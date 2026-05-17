@@ -23,9 +23,6 @@ destinations:
 
 clusterMetrics:
   enabled: true
-
-alloy-metrics:
-  enabled: true
   destinations: [central-mimir]
 
 podLogs:
@@ -42,6 +39,16 @@ kube-state-metrics:
 node-exporter:
   enabled: true
 
+# Required alloy collectors for enabled features
+alloy-metrics:
+  enabled: true
+
+alloy-logs:
+  enabled: true
+
+alloy-receiver:
+  enabled: false
+
 alloy:
   alloy:
     resources:
@@ -51,13 +58,3 @@ alloy:
       limits:
         cpu: 500m
         memory: 768Mi
-
-alloy-metrics:
-  enabled: true
-
-alloy-logs:
-  enabled: true
-
-alloy-receiver:
-  enabled: true
-

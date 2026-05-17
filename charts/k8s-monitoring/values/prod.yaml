@@ -1,10 +1,10 @@
 # k8s-monitoring — prod workload cluster (blue + green share same values)
 # Chart: grafana/k8s-monitoring
 # Ships to central-prod
-# cluster.name set via --set at deploy time to distinguish blue vs green
+# cluster.name set via ApplicationSet parameter at deploy time
 
 cluster:
-  name: ""  # injected via ApplicationSet: ai-search-prod-blue or ai-search-prod-green
+  name: "" # injected via ApplicationSet: ai-search-prod-blue or ai-search-prod-green
 
 destinations:
   - name: central-mimir
@@ -30,12 +30,7 @@ destinations:
 
 clusterMetrics:
   enabled: true
-
-alloy-metrics:
-  enabled: true
   destinations: [central-mimir]
-  # Tighter scrape interval for prod
-  scrapeInterval: 15s
 
 podLogs:
   enabled: true
@@ -51,6 +46,16 @@ kube-state-metrics:
 node-exporter:
   enabled: true
 
+# Required alloy collectors for enabled features
+alloy-metrics:
+  enabled: true
+
+alloy-logs:
+  enabled: true
+
+alloy-receiver:
+  enabled: false
+
 alloy:
   alloy:
     resources:
@@ -60,13 +65,3 @@ alloy:
       limits:
         cpu: 1000m
         memory: 1Gi
-
-alloy-metrics:
-  enabled: true
-
-alloy-logs:
-  enabled: true
-
-alloy-receiver:
-  enabled: true
-
