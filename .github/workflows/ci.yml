@@ -1,15 +1,18 @@
-name: CI — Lint and Validate
+name: CI
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+  workflow_dispatch:
+
+# Uncomment to enable automatic CI on push/PR
+# on:
+#   push:
+#     branches: [main]
+#   pull_request:
+#     branches: [main]
 
 jobs:
-  # ── Helm values lint ───────────────────────────────────────────────────────
   helm-lint:
-    name: Helm values lint
+    name: Helm lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,13 +23,11 @@ jobs:
 
       - name: Add chart repos
         run: |
-          helm repo add argo      https://argoproj.github.io/argo-helm
-          helm repo add grafana   https://grafana.github.io/helm-charts
+          helm repo add argo    https://argoproj.github.io/argo-helm
+          helm repo add grafana https://grafana.github.io/helm-charts
           helm repo update
 
       - name: Lint ArgoCD values
-        # ArgoCD is installed via bootstrap-argocd.yml workflow, not via ApplicationSet.
-        # Still lint values here so PRs catch schema errors before a bootstrap run.
         run: |
           helm lint --values charts/argocd/values/nonprod.yaml argo/argo-cd --version 7.7.11
           helm lint --values charts/argocd/values/prod.yaml    argo/argo-cd --version 7.7.11
@@ -53,7 +54,6 @@ jobs:
 
       - name: Lint Argo Rollouts values
         run: |
-          helm repo add argo https://argoproj.github.io/argo-helm && helm repo update
           helm lint --values charts/argo-rollouts/values/dev.yaml     argo/argo-rollouts --version 2.38.0
           helm lint --values charts/argo-rollouts/values/staging.yaml argo/argo-rollouts --version 2.38.0
           helm lint --values charts/argo-rollouts/values/prod.yaml    argo/argo-rollouts --version 2.38.0
@@ -64,34 +64,28 @@ jobs:
           helm lint --values charts/k8s-monitoring/values/staging.yaml grafana/k8s-monitoring --version 2.0.2
           helm lint --values charts/k8s-monitoring/values/prod.yaml    grafana/k8s-monitoring --version 2.0.2
 
-  # ── YAML validation ────────────────────────────────────────────────────────
   yaml-lint:
     name: YAML lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install yamllint
         run: pip install yamllint
-
-      - name: Lint all YAML
+      - name: Lint YAML
         run: |
           yamllint -d '{extends: relaxed, rules: {line-length: {max: 150}}}' \
             applicationsets/ bootstrap/ projects/ charts/
 
-  # ── ApplicationSet schema validation ──────────────────────────────────────
   validate-appsets:
     name: Validate ApplicationSets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - name: Install kubeconform
         run: |
           curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
             | tar xz && mv kubeconform /usr/local/bin/
-
-      - name: Validate ApplicationSet manifests
+      - name: Validate manifests
         run: |
           kubeconform \
             -schema-location default \
@@ -99,37 +93,31 @@ jobs:
             -summary \
             applicationsets/**/*.yaml bootstrap/*.yaml projects/*.yaml
 
-  # ── Diff check on PR ───────────────────────────────────────────────────────
-  helm-diff:
-    name: Helm template diff (informational)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: azure/setup-helm@v4
-        with:
-          version: "3.16.3"
-
-      - name: Add chart repos
-        run: |
-          helm repo add argo    https://argoproj.github.io/argo-helm
-          helm repo add grafana https://grafana.github.io/helm-charts
-          helm repo update
-
-      - name: Template nonprod stack (summary for PR review)
-        run: |
-          echo "=== ArgoCD nonprod ===" && \
-          helm template argocd argo/argo-cd --version 7.7.11 \
-            --values charts/argocd/values/nonprod.yaml | wc -l
-          echo "=== Loki nonprod ===" && \
-          helm template loki grafana/loki --version 6.24.0 \
-            --values charts/loki/values/nonprod.yaml | wc -l
-          echo "=== Mimir nonprod ===" && \
-          helm template mimir grafana/mimir-distributed --version 5.5.1 \
-            --values charts/mimir/values/nonprod.yaml | wc -l
-          echo "=== Tempo nonprod ===" && \
-          helm template tempo grafana/tempo --version 1.14.0 \
-            --values charts/tempo/values/nonprod.yaml | wc -l
+# ── COMMENTED OUT — PR-only diff, re-enable when auto CI is turned on ────────
+#
+# helm-diff:
+#   name: Helm template diff (informational)
+#   runs-on: ubuntu-latest
+#   if: github.event_name == 'pull_request'
+#   steps:
+#     - uses: actions/checkout@v4
+#       with:
+#         fetch-depth: 0
+#     - uses: azure/setup-helm@v4
+#       with:
+#         version: "3.16.3"
+#     - name: Add chart repos
+#       run: |
+#         helm repo add argo    https://argoproj.github.io/argo-helm
+#         helm repo add grafana https://grafana.github.io/helm-charts
+#         helm repo update
+#     - name: Template nonprod stack (line count summary)
+#       run: |
+#         echo "=== ArgoCD ===" && helm template argocd argo/argo-cd --version 7.7.11 \
+#           --values charts/argocd/values/nonprod.yaml | wc -l
+#         echo "=== Loki ===" && helm template loki grafana/loki --version 6.24.0 \
+#           --values charts/loki/values/nonprod.yaml | wc -l
+#         echo "=== Mimir ===" && helm template mimir grafana/mimir-distributed --version 5.5.1 \
+#           --values charts/mimir/values/nonprod.yaml | wc -l
+#         echo "=== Tempo ===" && helm template tempo grafana/tempo --version 1.14.0 \
+#           --values charts/tempo/values/nonprod.yaml | wc -l
