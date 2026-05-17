@@ -60,3 +60,13 @@ alloy:
       limits:
         cpu: 1000m
         memory: 1Gi
+
+alloy-metrics:
+  enabled: true
+
+alloy-logs:
+  enabled: true
+
+alloy-receiver:
+  enabled: true
+

@@ -53,3 +53,13 @@ alloy:
       limits:
         cpu: 500m
         memory: 512Mi
+
+alloy-metrics:
+  enabled: true
+
+alloy-logs:
+  enabled: true
+
+alloy-receiver:
+  enabled: true
+
