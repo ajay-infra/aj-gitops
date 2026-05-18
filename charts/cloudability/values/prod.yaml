@@ -1,0 +1,18 @@
+# cloudability/metrics-agent — prod
+# Same config as staging; prod clusters tend to have more namespaces so
+# allow slightly more memory headroom.
+
+agent:
+  apiKeySecretRef:
+    name: cloudability-api-key
+    key:  api-key
+
+  pollInterval: 300
+
+  resources:
+    requests:
+      cpu:    100m
+      memory: 128Mi
+    limits:
+      cpu:    300m
+      memory: 256Mi

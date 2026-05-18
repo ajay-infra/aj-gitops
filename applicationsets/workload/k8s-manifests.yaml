@@ -1,0 +1,77 @@
+# ApplicationSet — k8s-manifests on all workload clusters
+#
+# Deploys the full k8s-manifests repo to every ArgoCD-registered workload cluster.
+# Covers: OPA Gatekeeper policies (ConstraintTemplates + Constraints),
+#         Karpenter NodePools + EC2NodeClass, KEDA ScaledObjects, Kong plugins,
+#         ExternalSecrets, Falcon DaemonSet, namespace definitions, PodDisruptionBudgets.
+#
+# Sync policy mirrors provision-eks.yml argocd-register:
+#   dev + staging: auto-sync (auto_sync=true on cluster Secret)
+#   prod:          manual sync (auto_sync=false)
+#
+# OPA enforcement mode per environment is encoded in the manifests themselves
+# (enforcementAction: warn → dev/staging; deny → prod). No per-env paths needed.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-k8s-manifests
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:      "{{metadata.labels.environment}}"
+          autoSync: "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "k8s-manifests-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   k8s-manifests
+        cluster:     "{{name}}"
+    spec:
+      project: workloads
+
+      source:
+        repoURL:        https://github.com/ajay-infra/k8s-manifests
+        targetRevision: main
+        directory:
+          recurse: true   # deploy all YAML files in all subdirectories
+
+      destination:
+        server:    "{{server}}"
+        namespace: default   # namespace-scoped resources use their own namespace declarations
+
+      syncPolicy:
+        automated:
+          prune:     "{{values.autoSync}}"
+          selfHeal:  "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true   # required for CRD + Gatekeeper policy apply
+          - RespectIgnoreDifferences=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 30s
+            factor: 2
+            maxDuration: 5m
+
+      ignoreDifferences:
+        # Gatekeeper injects observedGeneration — ignore to prevent constant re-sync
+        - group: templates.gatekeeper.sh
+          kind: ConstraintTemplate
+          jsonPointers:
+            - /status
+        - group: constraints.gatekeeper.sh
+          kind: "*"
+          jsonPointers:
+            - /status

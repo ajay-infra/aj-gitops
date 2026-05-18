@@ -1,12 +1,13 @@
 # ApplicationSet — LGTM stack on central-nonprod
 #
-# Generates one Application per LGTM component.
-# Each Application points directly at the upstream Helm chart + values from this repo.
-# Components: grafana, loki, mimir-distributed, tempo
+# Generates one Application per LGTM component (Grafana, Loki, Mimir, Tempo).
+# S3 bucket names are deterministic (from aj-infra-central locals.tf):
+#   central-nonprod-loki-chunks   → loki.storage.bucketNames.chunks
+#   central-nonprod-mimir-blocks  → mimir.structuredConfig.common.storage.s3.bucket_name
+#   central-nonprod-tempo-traces  → tempo.storage.trace.s3.bucket
 #
-# ArgoCD is NOT managed here — it is installed and upgraded via the
-# bootstrap-argocd.yml workflow (helm upgrade --install). Never add ArgoCD
-# back to this list or it will conflict with the workflow-managed release.
+# ArgoCD is NOT managed here — installed via bootstrap-argocd.yml workflow.
+# Never add ArgoCD to this list.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -17,67 +18,76 @@ spec:
   generators:
     - list:
         elements:
-          - component: grafana
-            chart: grafana
-            repoURL: https://grafana.github.io/helm-charts
-            version: "8.8.4"
-            namespace: monitoring
-            valuesFile: charts/grafana/values/nonprod.yaml
+          - component:       grafana
+            chart:           grafana
+            repoURL:         https://grafana.github.io/helm-charts
+            version:         "8.8.4"
+            namespace:       monitoring
+            valuesFile:      charts/grafana/values/nonprod.yaml
+            s3BucketParam:   ""   # grafana has no S3 bucket
+            s3BucketValue:   ""
 
-          - component: loki
-            chart: loki
-            repoURL: https://grafana.github.io/helm-charts
-            version: "6.24.0"
-            namespace: monitoring
-            valuesFile: charts/loki/values/nonprod.yaml
+          - component:       loki
+            chart:           loki
+            repoURL:         https://grafana.github.io/helm-charts
+            version:         "6.24.0"
+            namespace:       monitoring
+            valuesFile:      charts/loki/values/nonprod.yaml
+            s3BucketParam:   loki.storage.bucketNames.chunks
+            s3BucketValue:   central-nonprod-loki-chunks
 
-          - component: mimir
-            chart: mimir-distributed
-            repoURL: https://grafana.github.io/helm-charts
-            version: "5.5.1"
-            namespace: monitoring
-            valuesFile: charts/mimir/values/nonprod.yaml
+          - component:       mimir
+            chart:           mimir-distributed
+            repoURL:         https://grafana.github.io/helm-charts
+            version:         "5.5.1"
+            namespace:       monitoring
+            valuesFile:      charts/mimir/values/nonprod.yaml
+            s3BucketParam:   mimir.structuredConfig.common.storage.s3.bucket_name
+            s3BucketValue:   central-nonprod-mimir-blocks
 
-          - component: tempo
-            chart: tempo
-            repoURL: https://grafana.github.io/helm-charts
-            version: "1.14.0"
-            namespace: monitoring
-            valuesFile: charts/tempo/values/nonprod.yaml
+          - component:       tempo
+            chart:           tempo
+            repoURL:         https://grafana.github.io/helm-charts
+            version:         "1.14.0"
+            namespace:       monitoring
+            valuesFile:      charts/tempo/values/nonprod.yaml
+            s3BucketParam:   tempo.storage.trace.s3.bucket
+            s3BucketValue:   central-nonprod-tempo-traces
 
   template:
     metadata:
       name: "central-nonprod-{{component}}"
       namespace: argocd
       annotations:
-        # Prevent deletion of monitoring namespace when ArgoCD app is removed
         argocd.argoproj.io/sync-options: "Prune=false"
     spec:
       project: platform
 
       sources:
-        # Source 1: upstream Helm chart
-        - repoURL: "{{repoURL}}"
-          chart: "{{chart}}"
+        - repoURL:        "{{repoURL}}"
+          chart:          "{{chart}}"
           targetRevision: "{{version}}"
           helm:
             releaseName: "{{component}}"
             valueFiles:
-              # Source 2 (ref): values from this repo
               - $values/{{valuesFile}}
+            parameters:
+              # Inject S3 bucket name for storage-backed components.
+              # Empty s3BucketParam (Grafana) is ignored by Helm.
+              - name:  "{{s3BucketParam}}"
+                value: "{{s3BucketValue}}"
 
-        # Source 2: this repo for values files
-        - repoURL: https://github.com/ajay-infra/aj-platform-gitops
+        - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
           targetRevision: main
           ref: values
 
       destination:
-        server: https://kubernetes.default.svc
+        server:    https://kubernetes.default.svc
         namespace: "{{namespace}}"
 
       syncPolicy:
         automated:
-          prune: true
+          prune:    true
           selfHeal: true
         syncOptions:
           - CreateNamespace=true
@@ -86,13 +96,12 @@ spec:
         retry:
           limit: 3
           backoff:
-            duration: 30s
-            factor: 2
+            duration:    30s
+            factor:      2
             maxDuration: 5m
 
       ignoreDifferences:
-        # Helm chart renders resource versions that change on every sync
         - group: apps
-          kind: Deployment
+          kind:  Deployment
           jsonPointers:
             - /spec/template/metadata/annotations/checksum~1config

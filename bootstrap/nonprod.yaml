@@ -1,38 +1,43 @@
 # Bootstrap — central-nonprod
 #
-# This is the ONLY manifest you apply manually after provisioning the central cluster.
-# Everything else is managed by ArgoCD once this is in place.
-#
-# Apply with:
+# Apply ONCE after provision-central.yml + aj-infra-central complete:
 #   kubectl apply -f bootstrap/nonprod.yaml
 #
-# ArgoCD then picks up:
-#   applicationsets/central/nonprod/  → installs LGTM stack on central-nonprod
-#   applicationsets/workload/          → manages dev + staging workload clusters
+# Creates two Applications that drive everything else:
+#
+#   1. bootstrap-central-nonprod
+#      → applicationsets/central/nonprod/   (LGTM stack on this cluster)
+#
+#   2. bootstrap-workload-platform
+#      → applicationsets/workload/          (all workload cluster ApplicationSets)
+#         k8s-monitoring, apps, arc-runners, k8s-manifests, cloudability
+#         These target only clusters registered with this hub (dev + staging).
+#
+# Everything after this is ArgoCD-managed. Upgrades = PRs to this repo.
+
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: bootstrap-central-nonprod
   namespace: argocd
-  # Keep this Application even if it appears "empty" — it drives everything else
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: platform
 
   source:
-    repoURL: https://github.com/ajay-infra/aj-platform-gitops
+    repoURL:        https://github.com/ajay-infra/aj-platform-gitops
     targetRevision: main
-    path: applicationsets/central/nonprod
+    path:           applicationsets/central/nonprod
 
   destination:
-    server: https://kubernetes.default.svc
+    server:    https://kubernetes.default.svc
     namespace: argocd
 
   syncPolicy:
     automated:
-      prune: true
+      prune:    true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
@@ -40,6 +45,40 @@ spec:
     retry:
       limit: 5
       backoff:
-        duration: 10s
-        factor: 2
+        duration:    10s
+        factor:      2
+        maxDuration: 3m
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap-workload-platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+    targetRevision: main
+    path:           applicationsets/workload
+
+  destination:
+    server:    https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune:    true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration:    10s
+        factor:      2
         maxDuration: 3m

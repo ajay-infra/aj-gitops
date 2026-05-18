@@ -1,0 +1,72 @@
+# ApplicationSet — Cloudability cost allocation agent on all workload clusters
+#
+# Deploys one cloudability/metrics-agent Helm release per workload cluster.
+# Provides per-namespace + per-container cost breakdown and rightsizing
+# recommendations in the Cloudability dashboard.
+#
+# Prerequisites per cluster:
+#   1. ExternalSecret "cloudability-api-key" in cloudability namespace
+#      (ESO pulls the API key from Secrets Manager — created by aj-infra-platform)
+#   2. Pod Identity or IRSA not required — agent only reads K8s metrics API
+#
+# All environments auto-sync — cost data collection is always-on.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-cloudability
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env: "{{metadata.labels.environment}}"
+
+  template:
+    metadata:
+      name: "cloudability-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   cloudability
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        https://apptio.github.io/apptio-cloudability-helm-charts
+          chart:          metrics-agent
+          targetRevision: "1.0.11"
+          helm:
+            releaseName: cloudability
+            valueFiles:
+              - $values/charts/cloudability/values/{{values.env}}.yaml
+            parameters:
+              # Cluster name is dynamic — passed here, not in static values files
+              - name:  clusterId
+                value: "{{name}}"
+
+        - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+          targetRevision: main
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: cloudability
+
+      syncPolicy:
+        automated:
+          prune:    true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 2m
