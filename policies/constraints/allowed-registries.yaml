@@ -1,0 +1,23 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: AllowedRegistries
+metadata:
+  name: allowed-registries-ecr-only
+spec:
+  # warn during rollout — flip to deny once all workloads use ECR pull-through cache
+  enforcementAction: warn
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+      - falcon-system
+      - karpenter
+  parameters:
+    allowedPrefixes:
+      # Single ECR base URL covers:
+      #   - Private app repos (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/frontend:v1)
+      #   - Pull-through cache (dockerhub/, quay/, ghcr/, k8s/, ecr-public/ all share this prefix)
+      # Replace ACCOUNT_ID and REGION with real values from aj-tf-module-ecr outputs.
+      - "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"

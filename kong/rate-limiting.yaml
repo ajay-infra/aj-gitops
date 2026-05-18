@@ -1,0 +1,24 @@
+# KongPlugin — rate limiting backed by Valkey for distributed counters.
+# Bind to a route via Ingress annotation:
+#   konghq.com/plugins: rate-limit-per-consumer
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: rate-limit-per-consumer
+  namespace: frontend
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: rate-limiting-advanced
+config:
+  limit:
+    - 100 # 100 requests per minute per consumer
+  window_size:
+    - 60
+  window_type: sliding
+  retry_after_jitter_max: 1
+  strategy: redis # Valkey is Redis-compatible
+  redis:
+    host: REPLACE_WITH_VALKEY_ENDPOINT # from aj-tf-module-valkey output
+    port: 6379
+    ssl: true
+    password: "" # injected via KongPlugin env or ESO secret

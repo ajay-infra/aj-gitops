@@ -1,0 +1,32 @@
+# ExternalSecret — Valkey (Redis-compatible) connection bundle.
+# Secret ARN from aj-tf-module-valkey output: secret_arn
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: valkey-auth
+  namespace: backend
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: valkey-auth
+    creationPolicy: Owner
+  data:
+    - secretKey: host
+      remoteRef:
+        key: REPLACE_WITH_VALKEY_SECRET_ARN # from aj-tf-module-valkey output
+        property: host
+    - secretKey: port
+      remoteRef:
+        key: REPLACE_WITH_VALKEY_SECRET_ARN
+        property: port
+    - secretKey: auth_token
+      remoteRef:
+        key: REPLACE_WITH_VALKEY_SECRET_ARN
+        property: auth_token
+    - secretKey: tls_enabled
+      remoteRef:
+        key: REPLACE_WITH_VALKEY_SECRET_ARN
+        property: tls_enabled

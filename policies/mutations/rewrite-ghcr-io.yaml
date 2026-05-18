@@ -1,0 +1,49 @@
+# ghcr.io/actions/runner:2.323 → ACCOUNT.dkr.ecr.REGION.amazonaws.com/ghcr/actions/runner:2.323
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: AssignImage
+metadata:
+  name: rewrite-ghcr-io-containers
+spec:
+  applyTo:
+    - groups: [""]
+      kinds: ["Pod"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+  location: "spec.containers[name:*].image"
+  parameters:
+    assignDomain: "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+    assignPath: "ghcr"
+    pathTests:
+      - subPath: "domain"
+        condition: In
+        value:
+          - "ghcr.io"
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: AssignImage
+metadata:
+  name: rewrite-ghcr-io-init-containers
+spec:
+  applyTo:
+    - groups: [""]
+      kinds: ["Pod"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+  location: "spec.initContainers[name:*].image"
+  parameters:
+    assignDomain: "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+    assignPath: "ghcr"
+    pathTests:
+      - subPath: "domain"
+        condition: In
+        value:
+          - "ghcr.io"

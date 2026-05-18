@@ -1,0 +1,34 @@
+# EC2NodeClass — shared by all NodePools.
+# CLUSTER_NAME is injected via ArgoCD ApplicationSet parameters at sync time.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: general-purpose
+spec:
+  amiFamily: AL2023
+  # Role must match the node IAM role created by aj-tf-module-eks
+  role: "KarpenterNodeRole-REPLACE_WITH_CLUSTER_NAME"
+
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_CLUSTER_NAME"
+        kubernetes.io/role/internal-elb: "1"
+
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_CLUSTER_NAME"
+
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeType: gp3
+        volumeSize: 50Gi
+        encrypted: true
+        deleteOnTermination: true
+
+  # SQS queue for spot interruption handling (created by aj-infra-platform Karpenter install)
+  # interruptionQueue: "REPLACE_WITH_CLUSTER_NAME"
+
+  tags:
+    ManagedBy: karpenter
+    KarpenterProvisioned: "true"

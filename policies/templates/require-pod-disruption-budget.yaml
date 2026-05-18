@@ -1,0 +1,41 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: requirepoddisruptionbudget
+  annotations:
+    description: "Every Deployment must have a matching PodDisruptionBudget to ensure safe node drains during Karpenter consolidation or EKS upgrades."
+spec:
+  crd:
+    spec:
+      names:
+        kind: RequirePodDisruptionBudget
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package requirepoddisruptionbudget
+
+        # This policy runs against Deployments.
+        # It checks that a PDB exists with a matching selector in the same namespace.
+        # Note: Gatekeeper can check existing resources via data.inventory.
+        violation[{"msg": msg}] {
+          input.review.kind.kind == "Deployment"
+          name := input.review.object.metadata.name
+          namespace := input.review.object.metadata.namespace
+          selector := input.review.object.spec.selector.matchLabels
+
+          # Look for a matching PDB in the same namespace
+          not pdb_exists(namespace, selector)
+
+          msg := sprintf(
+            "Deployment '%v' in namespace '%v' must have a matching PodDisruptionBudget.",
+            [name, namespace]
+          )
+        }
+
+        pdb_exists(namespace, selector) {
+          pdb := data.inventory.namespace[namespace]["policy/v1"]["PodDisruptionBudget"][_]
+          pdb_selector := pdb.spec.selector.matchLabels
+          # PDB selector must be a subset of Deployment selector
+          label_key := pdb_selector[key]
+          selector[key] == label_key
+        }

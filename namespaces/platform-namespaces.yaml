@@ -1,0 +1,19 @@
+---
+# falcon-system — CrowdStrike Falcon sensor (privileged — OPA exclusion applied)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: falcon-system
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    # OPA Gatekeeper excludes this namespace from no-privileged-containers constraint
+    admission.gatekeeper.sh/ignore: "true"
+---
+# cloudability — cost allocation agent
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cloudability
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    team: platform

@@ -1,0 +1,44 @@
+# public.ecr.aws/aws-observability/aws-otel-collector:v0.45 →
+# ACCOUNT.dkr.ecr.REGION.amazonaws.com/ecr-public/aws-observability/aws-otel-collector:v0.45
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: AssignImage
+metadata:
+  name: rewrite-ecr-public-containers
+spec:
+  applyTo:
+    - groups: [""]
+      kinds: ["Pod"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+  location: "spec.containers[name:*].image"
+  parameters:
+    assignDomain: "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+    assignPath: "ecr-public"
+    pathTests:
+      - subPath: "domain"
+        condition: In
+        value:
+          - "public.ecr.aws"
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: AssignImage
+metadata:
+  name: rewrite-ecr-public-init-containers
+spec:
+  applyTo:
+    - groups: [""]
+      kinds: ["Pod"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+  location: "spec.initContainers[name:*].image"
+  parameters:
+    assignDomain: "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+    assignPath: "ecr-public"
+    pathTests:
+      - subPath: "domain"
+        condition: In
+        value:
+          - "public.ecr.aws"

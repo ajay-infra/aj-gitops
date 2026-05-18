@@ -1,0 +1,40 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: denylatesttag
+  annotations:
+    description: "Block :latest image tags in prod — they make rollbacks impossible and deployments non-deterministic."
+spec:
+  crd:
+    spec:
+      names:
+        kind: DenyLatestTag
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package denylatesttag
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          has_latest_tag(container.image)
+          msg := sprintf(
+            "Container '%v' uses image '%v' with :latest tag. Pin to a specific digest or semver tag.",
+            [container.name, container.image]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          has_latest_tag(container.image)
+          msg := sprintf("initContainer '%v' must not use :latest tag.", [container.name])
+        }
+
+        has_latest_tag(image) {
+          # Image has no tag — defaults to :latest
+          not contains(image, ":")
+        }
+
+        has_latest_tag(image) {
+          # Image explicitly tagged :latest
+          endswith(image, ":latest")
+        }

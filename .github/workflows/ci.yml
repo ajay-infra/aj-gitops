@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+# Uncomment to enable automatic CI on push/PR
+# on:
+#   push:
+#     branches: [main]
+
+jobs:
+  yaml-lint:
+    name: YAML lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yamllint
+        run: pip install yamllint
+      - name: Lint all YAML
+        run: |
+          yamllint \
+            namespaces/ \
+            policies/ \
+            karpenter/ \
+            keda/ \
+            kong/ \
+            external-secrets/ \
+            falcon/ \
+            cloudability/
+
+  validate-k8s:
+    name: Validate Kubernetes manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar xz && mv kubeconform /usr/local/bin/
+      - name: Validate native K8s resources
+        run: |
+          kubeconform \
+            -schema-location default \
+            -ignore-missing-schemas \
+            -summary \
+            -kubernetes-version 1.35.0 \
+            namespaces/ \
+            falcon/ \
+            cloudability/
+        # OPA, Karpenter, KEDA, Kong CRDs are not in the default schema —
+        # -ignore-missing-schemas skips them; yamllint catches syntax errors
+
+  validate-opa:
+    name: Validate OPA Rego
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OPA
+        run: |
+          curl -sL https://openpolicyagent.org/downloads/v0.70.0/opa_linux_amd64_static \
+            -o /usr/local/bin/opa && chmod +x /usr/local/bin/opa
+      - name: Lint Rego policies
+        run: |
+          for template in policies/templates/*.yaml; do
+            echo "Checking $template"
+            # Extract and validate Rego blocks
+            python3 -c "
+          import yaml, sys
+          with open('$template') as f:
+              doc = yaml.safe_load(f)
+          targets = doc.get('spec', {}).get('targets', [])
+          for t in targets:
+              rego = t.get('rego', '')
+              if rego:
+                  with open('/tmp/policy.rego', 'w') as out:
+                      out.write(rego)
+          "
+            if [ -f /tmp/policy.rego ]; then
+              opa check /tmp/policy.rego && echo "  ✓ Rego valid"
+            fi
+          done

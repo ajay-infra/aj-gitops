@@ -1,0 +1,27 @@
+---
+# frontend — UI services, web servers
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: frontend
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    team: product
+---
+# backend — API services, workers
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: backend
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    team: product
+---
+# data-access — DB proxy, cache adapter services
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: data-access
+  labels:
+    app.kubernetes.io/managed-by: argocd
+    team: platform

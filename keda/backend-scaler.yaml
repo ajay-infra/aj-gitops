@@ -1,0 +1,26 @@
+# KEDA ScaledObject — backend services
+# Scales based on Prometheus metric (pending request queue depth in Mimir).
+# minReplicaCount: 0 in dev (scale to zero); 2 in prod (always-on SLA).
+# Do NOT create an HPA alongside this — KEDA manages it.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: backend-scaler
+  namespace: backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend # replace with actual deployment name
+  minReplicaCount: 0 # set to 2 for prod
+  maxReplicaCount: 20
+  pollingInterval: 30
+  cooldownPeriod: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://mimir-nginx.monitoring.svc.cluster.local
+        metricName: http_requests_pending_backend
+        query: |
+          sum(rate(http_requests_total{namespace="backend", job="backend"}[2m]))
+        threshold: "100"

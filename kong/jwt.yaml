@@ -1,0 +1,13 @@
+# KongPlugin — JWT authentication for API routes.
+# Bind via: konghq.com/plugins: jwt-auth
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: jwt-auth
+  namespace: frontend
+plugin: jwt
+config:
+  key_claim_name: kid
+  claims_to_verify:
+    - exp
+  maximum_expiration: 3600
