@@ -1,0 +1,20 @@
+# cloudability/metrics-agent — dev
+# clusterId injected at runtime by ApplicationSet (not set here)
+# API key pulled from ESO ExternalSecret "cloudability-api-key" in cloudability namespace
+
+agent:
+  # Pull API key from the ExternalSecret synced by aj-infra-platform ESO release
+  apiKeySecretRef:
+    name: cloudability-api-key
+    key:  api-key
+
+  # Poll every 5 min — default; reduce for cost if needed
+  pollInterval: 300
+
+  resources:
+    requests:
+      cpu:    50m
+      memory: 64Mi
+    limits:
+      cpu:    200m
+      memory: 128Mi

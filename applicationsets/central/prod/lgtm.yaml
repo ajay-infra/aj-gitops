@@ -1,4 +1,7 @@
 # ApplicationSet — LGTM stack on central-prod
+#
+# Prod: manual sync only — no automated: block.
+# S3 bucket names (central-prod-loki-chunks, etc.) injected via parameters.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -9,33 +12,41 @@ spec:
   generators:
     - list:
         elements:
-          - component: grafana
-            chart: grafana
-            repoURL: https://grafana.github.io/helm-charts
-            version: "8.8.4"
-            namespace: monitoring
-            valuesFile: charts/grafana/values/prod.yaml
+          - component:       grafana
+            chart:           grafana
+            repoURL:         https://grafana.github.io/helm-charts
+            version:         "8.8.4"
+            namespace:       monitoring
+            valuesFile:      charts/grafana/values/prod.yaml
+            s3BucketParam:   ""
+            s3BucketValue:   ""
 
-          - component: loki
-            chart: loki
-            repoURL: https://grafana.github.io/helm-charts
-            version: "6.24.0"
-            namespace: monitoring
-            valuesFile: charts/loki/values/prod.yaml
+          - component:       loki
+            chart:           loki
+            repoURL:         https://grafana.github.io/helm-charts
+            version:         "6.24.0"
+            namespace:       monitoring
+            valuesFile:      charts/loki/values/prod.yaml
+            s3BucketParam:   loki.storage.bucketNames.chunks
+            s3BucketValue:   central-prod-loki-chunks
 
-          - component: mimir
-            chart: mimir-distributed
-            repoURL: https://grafana.github.io/helm-charts
-            version: "5.5.1"
-            namespace: monitoring
-            valuesFile: charts/mimir/values/prod.yaml
+          - component:       mimir
+            chart:           mimir-distributed
+            repoURL:         https://grafana.github.io/helm-charts
+            version:         "5.5.1"
+            namespace:       monitoring
+            valuesFile:      charts/mimir/values/prod.yaml
+            s3BucketParam:   mimir.structuredConfig.common.storage.s3.bucket_name
+            s3BucketValue:   central-prod-mimir-blocks
 
-          - component: tempo
-            chart: tempo
-            repoURL: https://grafana.github.io/helm-charts
-            version: "1.14.0"
-            namespace: monitoring
-            valuesFile: charts/tempo/values/prod.yaml
+          - component:       tempo
+            chart:           tempo
+            repoURL:         https://grafana.github.io/helm-charts
+            version:         "1.14.0"
+            namespace:       monitoring
+            valuesFile:      charts/tempo/values/prod.yaml
+            s3BucketParam:   tempo.storage.trace.s3.bucket
+            s3BucketValue:   central-prod-tempo-traces
 
   template:
     metadata:
@@ -47,24 +58,27 @@ spec:
       project: platform
 
       sources:
-        - repoURL: "{{repoURL}}"
-          chart: "{{chart}}"
+        - repoURL:        "{{repoURL}}"
+          chart:          "{{chart}}"
           targetRevision: "{{version}}"
           helm:
             releaseName: "{{component}}"
             valueFiles:
               - $values/{{valuesFile}}
+            parameters:
+              - name:  "{{s3BucketParam}}"
+                value: "{{s3BucketValue}}"
 
-        - repoURL: https://github.com/ajay-infra/aj-platform-gitops
+        - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
           targetRevision: main
           ref: values
 
       destination:
-        server: https://kubernetes.default.svc
+        server:    https://kubernetes.default.svc
         namespace: "{{namespace}}"
 
       syncPolicy:
-        # Prod: no auto-sync for platform components — manual approval required
+        # Prod: manual sync — operator approves each LGTM component update
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
@@ -72,12 +86,12 @@ spec:
         retry:
           limit: 3
           backoff:
-            duration: 30s
-            factor: 2
+            duration:    30s
+            factor:      2
             maxDuration: 5m
 
       ignoreDifferences:
         - group: apps
-          kind: Deployment
+          kind:  Deployment
           jsonPointers:
             - /spec/template/metadata/annotations/checksum~1config

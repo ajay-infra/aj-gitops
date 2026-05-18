@@ -11,22 +11,28 @@ metadata:
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
-  description: Platform layer — ArgoCD, Grafana LGTM, Alloy
+  description: Platform layer — ArgoCD, Grafana LGTM, Alloy, ARC, Cloudability
 
   sourceRepos:
     - https://github.com/ajay-infra/aj-platform-gitops
-    # Upstream chart repos (ArgoCD Applications use direct Helm sources)
+    # Upstream chart repos
     - https://argoproj.github.io/argo-helm
     - https://grafana.github.io/helm-charts
+    - https://apptio.github.io/apptio-cloudability-helm-charts
+    - oci://ghcr.io/actions/actions-runner-controller-charts
 
   destinations:
     - namespace: argocd
       server: https://kubernetes.default.svc
     - namespace: monitoring
       server: https://kubernetes.default.svc
-    # Workload cluster destinations (registered by provision-eks.yml argocd-register stage)
+    # Workload cluster destinations
     - namespace: monitoring
-      server: "*"  # all registered clusters
+      server: "*"
+    - namespace: cloudability
+      server: "*"
+    - namespace: arc-runners
+      server: "*"
 
   clusterResourceWhitelist:
     - group: ""
