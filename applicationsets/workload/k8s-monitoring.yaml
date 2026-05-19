@@ -4,10 +4,14 @@
 # workload cluster. Ships metrics → central Mimir, logs → central Loki,
 # traces → central Tempo over VPC peering.
 #
-# Cluster Secrets are created by the argocd-register stage in provision-eks.yml
-# with labels:
-#   tier: workload
-#   environment: dev | staging | prod
+# Cluster Secrets set by provision-eks.yml argocd-register:
+#   labels:      tier=workload  environment=<env>  auto_sync=true|false
+#   annotations: ecr_registry=<account>.dkr.ecr.<region>.amazonaws.com
+#
+# ECR pull-through: Alloy image (docker.io/grafana/alloy) routed through
+# ECR dockerhub/ prefix. kube-state-metrics (registry.k8s.io) and
+# node-exporter (quay.io) are handled by the OPA AssignImage mutation policy.
+# Verify alloy image param: helm show values grafana/k8s-monitoring --version 2.0.2
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -21,7 +25,9 @@ spec:
           matchLabels:
             tier: workload
         values:
-          valuesFile: "charts/k8s-monitoring/values/{{metadata.labels.environment}}.yaml"
+          valuesFile:   "charts/k8s-monitoring/values/{{metadata.labels.environment}}.yaml"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
 
   template:
     metadata:
@@ -38,10 +44,12 @@ spec:
             releaseName: k8s-monitoring
             valueFiles:
               - $values/{{values.valuesFile}}
-            # Inject cluster name for prod (blue vs green distinguish themselves)
             parameters:
               - name: cluster.name
                 value: "{{name}}"
+              # Route Alloy image through ECR dockerhub/ pull-through cache
+              - name: alloy.image.repository
+                value: "{{values.ecr_registry}}/dockerhub/grafana/alloy"
 
         - repoURL: https://github.com/ajay-infra/aj-platform-gitops
           targetRevision: main
@@ -53,8 +61,8 @@ spec:
 
       syncPolicy:
         automated:
-          prune: true
-          selfHeal: true
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
