@@ -1,0 +1,62 @@
+# ApplicationSet — Gateway API CRDs on all workload clusters
+#
+# Installs the standard Gateway API CRD bundle (GatewayClass, Gateway, HTTPRoute,
+# ReferenceGrant, GRPCRoute) from the official OCI Helm chart.
+#
+# ORDERING: This ApplicationSet must be synced before workload-kong.
+# Gateway API CRDs must exist before KIC starts or it will crash-loop.
+# Sync wave 1 — KIC is wave 2, GatewayClass+Gateway are wave 3.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-gateway-api-crds
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:      "{{metadata.labels.environment}}"
+          autoSync: "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "gateway-api-crds-{{name}}"
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+      labels:
+        environment: "{{values.env}}"
+        component:   gateway-api-crds
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      source:
+        repoURL:        oci://registry.k8s.io/gateway-api
+        chart:          gateway-api
+        targetRevision: v1.2.1
+        helm:
+          releaseName: gateway-api
+
+      destination:
+        server:    "{{server}}"
+        namespace: gateway-system
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - Replace=true  # CRDs require Replace to update without conflicts
+        retry:
+          limit: 3
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 2m

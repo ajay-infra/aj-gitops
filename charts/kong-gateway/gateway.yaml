@@ -1,0 +1,35 @@
+# Gateway — declares L7 listeners that KIC maps to Kong proxy service ports.
+# Namespace: kong (same as KIC deployment — KIC only watches its own namespace).
+# allowedRoutes.namespaces.from: All — HTTPRoutes in any namespace can attach.
+#
+# TLS: cert-manager issues the wildcard cert via ClusterIssuer (DNS-01/Route53).
+# Certificate CRD + ClusterIssuer live in k8s-manifests.
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: kong
+  namespace: kong
+spec:
+  gatewayClassName: kong
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
+
+    - name: https
+      port: 443
+      protocol: HTTPS
+      allowedRoutes:
+        namespaces:
+          from: All
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            group: ""
+            name: kong-wildcard-tls
+            namespace: kong

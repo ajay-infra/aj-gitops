@@ -1,0 +1,60 @@
+# ApplicationSet — Kong GatewayClass + Gateway on all workload clusters
+#
+# Deploys the GatewayClass (cluster-scoped) and Gateway (kong namespace).
+# GatewayClass tells KIC which Gateway objects it owns.
+# Gateway declares the L7 listeners (HTTP:80, HTTPS:443) that KIC maps to Kong proxy ports.
+#
+# Teams reference gatewayClassName: kong in HTTPRoute resources — no Ingress needed.
+#
+# Sync wave 3 — after gateway-api-crds (wave 1) and kong KIC (wave 2).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-kong-gateway
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:      "{{metadata.labels.environment}}"
+          autoSync: "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "kong-gateway-{{name}}"
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "3"
+      labels:
+        environment: "{{values.env}}"
+        component:   kong-gateway
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      source:
+        repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+        targetRevision: main
+        path:           charts/kong-gateway
+
+      destination:
+        server:    "{{server}}"
+        namespace: kong
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=false  # kong ns created by workload-kong ApplicationSet
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 30s
+            factor: 2
+            maxDuration: 5m
