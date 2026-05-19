@@ -1,0 +1,74 @@
+# ApplicationSet — external-dns on all workload clusters
+#
+# Watches Ingress + Service objects and creates/updates Route53 records.
+# Critical for blue/green: DNS records are created automatically when the new
+# ALB comes up and cleaned up when it tears down (dev/staging: policy=sync).
+# Prod uses policy=upsert-only — never deletes records automatically.
+#
+# Pod Identity IAM (Route53) is provisioned by aj-infra-platform.
+# txtOwnerId is set to the cluster name to prevent clusters overwriting
+# each other's records.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-external-dns
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:          "{{metadata.labels.environment}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "external-dns-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   external-dns
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        https://kubernetes-sigs.github.io/external-dns/
+          chart:          external-dns
+          targetRevision: "1.15.0"
+          helm:
+            releaseName: external-dns
+            valueFiles:
+              - $values/charts/external-dns/values/{{values.env}}.yaml
+            parameters:
+              - name:  txtOwnerId
+                value: "{{name}}"
+              # registry.k8s.io → ECR k8s/ pull-through cache
+              - name:  image.repository
+                value: "{{values.ecr_registry}}/k8s/external-dns/external-dns"
+
+        - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+          targetRevision: main
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: external-dns
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m

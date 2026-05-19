@@ -23,7 +23,9 @@ spec:
           matchLabels:
             tier: workload
         values:
-          env: "{{metadata.labels.environment}}"
+          env:          "{{metadata.labels.environment}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
 
   template:
     metadata:
@@ -45,9 +47,10 @@ spec:
             valueFiles:
               - $values/charts/cloudability/values/{{values.env}}.yaml
             parameters:
-              # Cluster name is dynamic — passed here, not in static values files
               - name:  clusterId
                 value: "{{name}}"
+              - name:  image.repository
+                value: "{{values.ecr_registry}}/dockerhub/apptio/cloudability-agent"
 
         - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
           targetRevision: main
@@ -59,8 +62,8 @@ spec:
 
       syncPolicy:
         automated:
-          prune:    true
-          selfHeal: true
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

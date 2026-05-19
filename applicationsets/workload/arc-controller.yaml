@@ -1,27 +1,16 @@
-# ApplicationSet — ARC Runner Scale Sets on all workload clusters
+# ApplicationSet — ARC controller on all workload clusters
 #
-# Deploys one gha-runner-scale-set Helm release per workload cluster.
-# The ARC controller (workload-arc-controller) watches these scale sets
-# and spins up ephemeral runner pods when GitHub Actions jobs are queued.
+# Deploys the Actions Runner Controller operator (arc-systems namespace).
+# The controller watches GitHub for queued jobs and scales runner pods.
+# Runner Scale Sets (the actual runners) are in arc-runners.yaml.
 #
-# Prerequisites per cluster:
-#   1. workload-arc-controller Application synced first
-#   2. ESO ExternalSecret "arc-github-app-secret" in arc-runners namespace
-#      (pulls GitHub App credentials from Secrets Manager)
-#   3. Pod Identity association for arc-runner-<env> service account
-#
-# OCI chart source routed through ECR ghcr/ pull-through cache.
-# Runner pod image (ghcr.io/actions/actions-runner) handled by OPA AssignImage.
-#
-# Workflow usage:
-#   runs-on: [self-hosted, dev]      # targets dev cluster runners
-#   runs-on: [self-hosted, staging]  # targets staging cluster runners
-#   runs-on: [self-hosted, prod]     # targets prod cluster runners
+# IAM for runner pods is provisioned by aj-infra-platform (arc.tf).
+# The controller itself needs no IAM — only the runner pods do.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: arc-runner-sets
+  name: workload-arc-controller
   namespace: argocd
 spec:
   generators:
@@ -36,23 +25,26 @@ spec:
 
   template:
     metadata:
-      name: "arc-runners-{{values.env}}-{{name}}"
+      name: "arc-controller-{{name}}"
       namespace: argocd
       labels:
         environment: "{{values.env}}"
-        component:   arc-runners
+        component:   arc-controller
         cluster:     "{{name}}"
     spec:
       project: platform
 
       sources:
         - repoURL:        "oci://{{values.ecr_registry}}/ghcr/actions/actions-runner-controller-charts"
-          chart:          gha-runner-scale-set
+          chart:          gha-runner-scale-set-controller
           targetRevision: "0.9.3"
           helm:
-            releaseName: "arc-runners-{{values.env}}"
+            releaseName: arc
             valueFiles:
-              - $values/charts/arc-runners/values/{{values.env}}.yaml
+              - $values/charts/arc-controller/values/{{values.env}}.yaml
+            parameters:
+              - name:  image.repository
+                value: "{{values.ecr_registry}}/ghcr/actions/gha-runner-scale-set-controller"
 
         - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
           targetRevision: main
@@ -60,7 +52,7 @@ spec:
 
       destination:
         server:    "{{server}}"
-        namespace: arc-runners
+        namespace: arc-systems
 
       syncPolicy:
         automated:
