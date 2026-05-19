@@ -1,0 +1,71 @@
+# ApplicationSet — KEDA on all workload clusters
+#
+# Pod Identity IAM (SQS + CloudWatch) is provisioned by aj-infra-platform.
+# ScaledObject CRDs live in k8s-manifests. Do NOT use HPA + KEDA on the
+# same Deployment.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-keda
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:          "{{metadata.labels.environment}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "keda-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   keda
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        https://kedacore.github.io/charts
+          chart:          keda
+          targetRevision: "2.16.0"
+          helm:
+            releaseName: keda
+            valueFiles:
+              - $values/charts/keda/values/{{values.env}}.yaml
+            parameters:
+              # ghcr.io → ECR ghcr/ pull-through cache
+              - name:  image.keda.repository
+                value: "{{values.ecr_registry}}/ghcr/kedacore/keda"
+              - name:  image.metricsApiServer.repository
+                value: "{{values.ecr_registry}}/ghcr/kedacore/keda-metrics-apiserver"
+              - name:  image.webhooks.repository
+                value: "{{values.ecr_registry}}/ghcr/kedacore/keda-admission-webhooks"
+
+        - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+          targetRevision: main
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: keda
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m

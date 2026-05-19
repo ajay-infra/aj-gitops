@@ -1,13 +1,18 @@
 # ApplicationSet — LGTM stack on central-nonprod
 #
-# Generates one Application per LGTM component (Grafana, Loki, Mimir, Tempo).
-# S3 bucket names are deterministic (from aj-infra-central locals.tf):
-#   central-nonprod-loki-chunks   → loki.storage.bucketNames.chunks
-#   central-nonprod-mimir-blocks  → mimir.structuredConfig.common.storage.s3.bucket_name
-#   central-nonprod-tempo-traces  → tempo.storage.trace.s3.bucket
+# Matrix generator: clusters(tier=central, environment=nonprod) × LGTM components.
+# Generates one Application per component on every matching central cluster.
 #
+# Cluster Secret set by provision-central.yml:
+#   labels:      tier=central  environment=nonprod  auto_sync=true
+#   annotations: ecr_registry=<account>.dkr.ecr.<region>.amazonaws.com
+#
+# ECR pull-through: each component's image.repository is overridden to route
+# docker.io/grafana/* through the ECR dockerhub/ pull-through prefix.
+# Verify imageParam paths: helm show values <chart> --version <version>
+#
+# S3 buckets: central-nonprod-<s3BucketSuffix> — names match aj-infra-central locals.tf.
 # ArgoCD is NOT managed here — installed via bootstrap-argocd.yml workflow.
-# Never add ArgoCD to this list.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -16,50 +21,73 @@ metadata:
   namespace: argocd
 spec:
   generators:
-    - list:
-        elements:
-          - component:       grafana
-            chart:           grafana
-            repoURL:         https://grafana.github.io/helm-charts
-            version:         "8.8.4"
-            namespace:       monitoring
-            valuesFile:      charts/grafana/values/nonprod.yaml
-            s3BucketParam:   ""   # grafana has no S3 bucket
-            s3BucketValue:   ""
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  tier: central
+                  environment: nonprod
+              values:
+                env:          "{{metadata.labels.environment}}"
+                ecr_registry: "{{metadata.annotations.ecr_registry}}"
+                autoSync:     "{{metadata.labels.auto_sync}}"
 
-          - component:       loki
-            chart:           loki
-            repoURL:         https://grafana.github.io/helm-charts
-            version:         "6.24.0"
-            namespace:       monitoring
-            valuesFile:      charts/loki/values/nonprod.yaml
-            s3BucketParam:   loki.storage.bucketNames.chunks
-            s3BucketValue:   central-nonprod-loki-chunks
+          - list:
+              elements:
+                - component:      grafana
+                  chart:          grafana
+                  repoURL:        https://grafana.github.io/helm-charts
+                  version:        "8.8.4"
+                  namespace:      monitoring
+                  valuesFile:     charts/grafana/values/nonprod.yaml
+                  s3BucketParam:  ""
+                  s3BucketSuffix: ""
+                  imageParam:     image.repository
+                  imageRepo:      grafana/grafana
 
-          - component:       mimir
-            chart:           mimir-distributed
-            repoURL:         https://grafana.github.io/helm-charts
-            version:         "5.5.1"
-            namespace:       monitoring
-            valuesFile:      charts/mimir/values/nonprod.yaml
-            s3BucketParam:   mimir.structuredConfig.common.storage.s3.bucket_name
-            s3BucketValue:   central-nonprod-mimir-blocks
+                - component:      loki
+                  chart:          loki
+                  repoURL:        https://grafana.github.io/helm-charts
+                  version:        "6.24.0"
+                  namespace:      monitoring
+                  valuesFile:     charts/loki/values/nonprod.yaml
+                  s3BucketParam:  loki.storage.bucketNames.chunks
+                  s3BucketSuffix: loki-chunks
+                  imageParam:     loki.image.repository
+                  imageRepo:      grafana/loki
 
-          - component:       tempo
-            chart:           tempo
-            repoURL:         https://grafana.github.io/helm-charts
-            version:         "1.14.0"
-            namespace:       monitoring
-            valuesFile:      charts/tempo/values/nonprod.yaml
-            s3BucketParam:   tempo.storage.trace.s3.bucket
-            s3BucketValue:   central-nonprod-tempo-traces
+                - component:      mimir
+                  chart:          mimir-distributed
+                  repoURL:        https://grafana.github.io/helm-charts
+                  version:        "5.5.1"
+                  namespace:      monitoring
+                  valuesFile:     charts/mimir/values/nonprod.yaml
+                  s3BucketParam:  mimir.structuredConfig.common.storage.s3.bucket_name
+                  s3BucketSuffix: mimir-blocks
+                  imageParam:     mimir.image.repository
+                  imageRepo:      grafana/mimir
+
+                - component:      tempo
+                  chart:          tempo
+                  repoURL:        https://grafana.github.io/helm-charts
+                  version:        "1.14.0"
+                  namespace:      monitoring
+                  valuesFile:     charts/tempo/values/nonprod.yaml
+                  s3BucketParam:  tempo.storage.trace.s3.bucket
+                  s3BucketSuffix: tempo-traces
+                  imageParam:     tempo.image.repository
+                  imageRepo:      grafana/tempo
 
   template:
     metadata:
-      name: "central-nonprod-{{component}}"
+      name: "central-{{values.env}}-{{component}}"
       namespace: argocd
       annotations:
         argocd.argoproj.io/sync-options: "Prune=false"
+      labels:
+        environment: "{{values.env}}"
+        component:   "{{component}}"
     spec:
       project: platform
 
@@ -72,23 +100,25 @@ spec:
             valueFiles:
               - $values/{{valuesFile}}
             parameters:
-              # Inject S3 bucket name for storage-backed components.
-              # Empty s3BucketParam (Grafana) is ignored by Helm.
+              # S3 storage bucket — empty s3BucketParam (Grafana) produces a no-op set
               - name:  "{{s3BucketParam}}"
-                value: "{{s3BucketValue}}"
+                value: "central-{{values.env}}-{{s3BucketSuffix}}"
+              # Route container pulls through ECR dockerhub/ pull-through cache
+              - name:  "{{imageParam}}"
+                value: "{{values.ecr_registry}}/dockerhub/{{imageRepo}}"
 
         - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
           targetRevision: main
           ref: values
 
       destination:
-        server:    https://kubernetes.default.svc
+        server:    "{{server}}"
         namespace: "{{namespace}}"
 
       syncPolicy:
         automated:
-          prune:    true
-          selfHeal: true
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

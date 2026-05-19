@@ -1,0 +1,69 @@
+# ApplicationSet — Gateway API CRDs on all workload clusters
+#
+# Installs the standard Gateway API CRD bundle (GatewayClass, Gateway, HTTPRoute,
+# ReferenceGrant, GRPCRoute) from the official OCI Helm chart.
+#
+# Chart source: registry.k8s.io/gateway-api/gateway-api (OCI)
+# Routed through ECR pull-through cache (k8s/ prefix → registry.k8s.io).
+# ecr_registry annotation on cluster Secrets set by provision-eks.yml:
+#   kubectl annotate secret <cluster> -n argocd ecr_registry=<account>.dkr.ecr.<region>.amazonaws.com
+#
+# ORDERING: This ApplicationSet must be synced before workload-kong.
+# Gateway API CRDs must exist before KIC starts or it will crash-loop.
+# Sync wave 1 — KIC is wave 2, GatewayClass+Gateway are wave 3.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-gateway-api-crds
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:          "{{metadata.labels.environment}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+
+  template:
+    metadata:
+      name: "gateway-api-crds-{{name}}"
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+      labels:
+        environment: "{{values.env}}"
+        component:   gateway-api-crds
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      source:
+        # registry.k8s.io → ECR pull-through cache (k8s/ prefix)
+        repoURL:        "oci://{{values.ecr_registry}}/k8s/gateway-api"
+        chart:          gateway-api
+        targetRevision: v1.2.1
+        helm:
+          releaseName: gateway-api
+
+      destination:
+        server:    "{{server}}"
+        namespace: gateway-system
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - Replace=true  # CRDs require Replace to update without conflicts
+        retry:
+          limit: 3
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 2m

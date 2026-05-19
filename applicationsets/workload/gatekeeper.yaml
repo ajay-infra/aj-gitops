@@ -1,0 +1,72 @@
+# ApplicationSet — OPA Gatekeeper on all workload clusters
+#
+# Deploys the Gatekeeper admission controller. ConstraintTemplates + Constraints
+# (the actual policies) live in k8s-manifests and are synced separately.
+# No IAM needed — Gatekeeper only talks to the K8s API server.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-gatekeeper
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:          "{{metadata.labels.environment}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "gatekeeper-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   gatekeeper
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        https://open-policy-agent.github.io/gatekeeper/charts
+          chart:          gatekeeper
+          targetRevision: "v3.17.1"
+          helm:
+            releaseName: gatekeeper
+            valueFiles:
+              - $values/charts/gatekeeper/values/{{values.env}}.yaml
+            parameters:
+              - name:  image.repository
+                value: "{{values.ecr_registry}}/dockerhub/openpolicyagent/gatekeeper"
+
+        - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+          targetRevision: main
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: gatekeeper-system
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m
+
+      ignoreDifferences:
+        - group: "*"
+          kind:  ValidatingWebhookConfiguration
+          jsonPointers:
+            - /webhooks/0/failurePolicy
