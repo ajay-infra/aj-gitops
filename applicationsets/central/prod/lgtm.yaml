@@ -1,7 +1,19 @@
 # ApplicationSet — LGTM stack on central-prod
 #
-# Prod: manual sync only — no automated: block.
-# S3 bucket names (central-prod-loki-chunks, etc.) injected via parameters.
+# Matrix generator: clusters(tier=central, environment=prod) × LGTM components.
+# Generates one Application per component on every matching central cluster.
+#
+# Cluster Secret set by provision-central.yml:
+#   labels:      tier=central  environment=prod  auto_sync=false
+#   annotations: ecr_registry=<account>.dkr.ecr.<region>.amazonaws.com
+#
+# ECR pull-through: each component's image.repository is overridden to route
+# docker.io/grafana/* through the ECR dockerhub/ pull-through prefix.
+# Verify imageParam paths: helm show values <chart> --version <version>
+#
+# S3 buckets: central-prod-<s3BucketSuffix> — names match aj-infra-central locals.tf.
+# Sync: manual (auto_sync=false on cluster Secret) — operator approves each update.
+# ArgoCD is NOT managed here — installed via bootstrap-argocd.yml workflow.
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -10,50 +22,73 @@ metadata:
   namespace: argocd
 spec:
   generators:
-    - list:
-        elements:
-          - component:       grafana
-            chart:           grafana
-            repoURL:         https://grafana.github.io/helm-charts
-            version:         "8.8.4"
-            namespace:       monitoring
-            valuesFile:      charts/grafana/values/prod.yaml
-            s3BucketParam:   ""
-            s3BucketValue:   ""
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  tier: central
+                  environment: prod
+              values:
+                env:          "{{metadata.labels.environment}}"
+                ecr_registry: "{{metadata.annotations.ecr_registry}}"
+                autoSync:     "{{metadata.labels.auto_sync}}"
 
-          - component:       loki
-            chart:           loki
-            repoURL:         https://grafana.github.io/helm-charts
-            version:         "6.24.0"
-            namespace:       monitoring
-            valuesFile:      charts/loki/values/prod.yaml
-            s3BucketParam:   loki.storage.bucketNames.chunks
-            s3BucketValue:   central-prod-loki-chunks
+          - list:
+              elements:
+                - component:      grafana
+                  chart:          grafana
+                  repoURL:        https://grafana.github.io/helm-charts
+                  version:        "8.8.4"
+                  namespace:      monitoring
+                  valuesFile:     charts/grafana/values/prod.yaml
+                  s3BucketParam:  ""
+                  s3BucketSuffix: ""
+                  imageParam:     image.repository
+                  imageRepo:      grafana/grafana
 
-          - component:       mimir
-            chart:           mimir-distributed
-            repoURL:         https://grafana.github.io/helm-charts
-            version:         "5.5.1"
-            namespace:       monitoring
-            valuesFile:      charts/mimir/values/prod.yaml
-            s3BucketParam:   mimir.structuredConfig.common.storage.s3.bucket_name
-            s3BucketValue:   central-prod-mimir-blocks
+                - component:      loki
+                  chart:          loki
+                  repoURL:        https://grafana.github.io/helm-charts
+                  version:        "6.24.0"
+                  namespace:      monitoring
+                  valuesFile:     charts/loki/values/prod.yaml
+                  s3BucketParam:  loki.storage.bucketNames.chunks
+                  s3BucketSuffix: loki-chunks
+                  imageParam:     loki.image.repository
+                  imageRepo:      grafana/loki
 
-          - component:       tempo
-            chart:           tempo
-            repoURL:         https://grafana.github.io/helm-charts
-            version:         "1.14.0"
-            namespace:       monitoring
-            valuesFile:      charts/tempo/values/prod.yaml
-            s3BucketParam:   tempo.storage.trace.s3.bucket
-            s3BucketValue:   central-prod-tempo-traces
+                - component:      mimir
+                  chart:          mimir-distributed
+                  repoURL:        https://grafana.github.io/helm-charts
+                  version:        "5.5.1"
+                  namespace:      monitoring
+                  valuesFile:     charts/mimir/values/prod.yaml
+                  s3BucketParam:  mimir.structuredConfig.common.storage.s3.bucket_name
+                  s3BucketSuffix: mimir-blocks
+                  imageParam:     mimir.image.repository
+                  imageRepo:      grafana/mimir
+
+                - component:      tempo
+                  chart:          tempo
+                  repoURL:        https://grafana.github.io/helm-charts
+                  version:        "1.14.0"
+                  namespace:      monitoring
+                  valuesFile:     charts/tempo/values/prod.yaml
+                  s3BucketParam:  tempo.storage.trace.s3.bucket
+                  s3BucketSuffix: tempo-traces
+                  imageParam:     tempo.image.repository
+                  imageRepo:      grafana/tempo
 
   template:
     metadata:
-      name: "central-prod-{{component}}"
+      name: "central-{{values.env}}-{{component}}"
       namespace: argocd
       annotations:
         argocd.argoproj.io/sync-options: "Prune=false"
+      labels:
+        environment: "{{values.env}}"
+        component:   "{{component}}"
     spec:
       project: platform
 
@@ -66,19 +101,27 @@ spec:
             valueFiles:
               - $values/{{valuesFile}}
             parameters:
+              # S3 storage bucket — empty s3BucketParam (Grafana) produces a no-op set
               - name:  "{{s3BucketParam}}"
-                value: "{{s3BucketValue}}"
+                value: "central-{{values.env}}-{{s3BucketSuffix}}"
+              # Route container pulls through ECR dockerhub/ pull-through cache
+              - name:  "{{imageParam}}"
+                value: "{{values.ecr_registry}}/dockerhub/{{imageRepo}}"
 
         - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
           targetRevision: main
           ref: values
 
       destination:
-        server:    https://kubernetes.default.svc
+        server:    "{{server}}"
         namespace: "{{namespace}}"
 
       syncPolicy:
-        # Prod: manual sync — operator approves each LGTM component update
+        # auto_sync=false on prod cluster Secret — automated block is present but
+        # prune/selfHeal evaluate to "false", giving effective manual-gate behaviour
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
