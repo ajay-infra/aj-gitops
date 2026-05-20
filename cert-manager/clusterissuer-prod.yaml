@@ -1,0 +1,32 @@
+# ClusterIssuer — Let's Encrypt production
+#
+# Issues real, trusted TLS certificates via DNS-01 challenge against Route53.
+# Rate limit: 5 certs/week per registered domain — use letsencrypt-staging
+# first to validate the full flow before switching Certificates to this issuer.
+#
+# Prerequisites (wired in aj-infra-platform):
+#   1. cert-manager Pod Identity IAM role with Route53 permissions:
+#        route53:GetChange
+#        route53:ChangeResourceRecordSets
+#        route53:ListHostedZonesByName
+#   2. aws_eks_pod_identity_association: cert-manager/cert-manager SA → that role
+#
+# TODO: set hostedZoneID once Route53 hosted zone is created (DNS step 2).
+#       Omitting it now — cert-manager discovers the zone via ListHostedZonesByName.
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    email: ajay56611@gmail.com
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+    solvers:
+      - dns01:
+          route53:
+            region: us-east-1
+            # No credentials block — cert-manager uses EKS Pod Identity
+            # (ambient AWS credentials from the cert-manager pod's IAM role)
