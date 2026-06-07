@@ -1,0 +1,107 @@
+# rollout-template — default values
+#
+# This chart replaces the standard Deployment with an Argo Rollout.
+# The HTTPRoute uses Gateway API traffic splitting to route a configurable
+# percentage of traffic to the canary version during rollout.
+#
+# How canary promotion works:
+#   1. Image tag updated (by CI or ArgoCD Image Updater)
+#   2. Argo Rollouts creates canary pods and sets HTTPRoute weight to canary.weight
+#   3. AnalysisTemplate runs Prometheus queries against the canary
+#   4. If analysis passes, Rollouts shifts traffic to 100% stable and terminates canary pods
+#   5. If analysis fails, Rollouts auto-rollbacks to previous stable
+#
+# Argo Rollouts controls HTTPRoute backendRefs weights by patching the resource.
+# The stable Service always exists; the canary Service is created only during rollout.
+
+app: ""        # required: app name (used in resource names + labels)
+team: ""       # required
+namespace: ""  # required
+env: ""        # required: dev | staging | prod
+component: ""
+version: ""
+model: internal
+
+image:
+  repository: ""   # required
+  tag: ""          # required
+  pullPolicy: IfNotPresent
+
+containerPort: 8080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+healthCheck:
+  path: /health
+  port: 8080
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 15
+    failureThreshold: 3
+    timeoutSeconds: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 3
+
+service:
+  port: 80
+  targetPort: 8080
+
+canary:
+  # Percentage of traffic sent to the canary during rollout.
+  # Argo Rollouts will patch the HTTPRoute backendRefs weight to this value.
+  weight: 20
+
+  # How long to pause at canary weight before auto-promoting (if analysis passes).
+  # Set to 0 to require manual promotion (recommended for prod).
+  pauseDurationSeconds: 300
+
+  # Number of canary pod replicas during rollout.
+  replicaCount: 1
+
+  # Analysis runs every interval for duration before promoting.
+  # Both must pass for automatic promotion.
+  analysis:
+    # Prometheus query that must return < threshold (error rate check).
+    errorRateQuery: >
+      sum(rate(http_requests_total{app="__APP__",status=~"5.."}[2m]))
+      /
+      sum(rate(http_requests_total{app="__APP__"}[2m]))
+    errorRateThreshold: "0.05"   # fail if error rate > 5%
+
+    # Latency p99 must stay below this (milliseconds).
+    latencyQuery: >
+      histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{app="__APP__"}[2m])) by (le))
+      * 1000
+    latencyThreshold: "500"      # fail if p99 latency > 500ms
+
+    interval: 1m
+    count: 5                     # run 5 measurement intervals (5 min total)
+
+httpRoute:
+  enabled: true
+  hostname: ""    # required when enabled (e.g. api.aj-platform.io)
+  parentRef:
+    name: kong
+    namespace: kong
+    sectionName: https
+
+env: []
+volumeMounts: []
+volumes: []
+podAnnotations: {}

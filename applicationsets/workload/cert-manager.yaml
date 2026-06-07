@@ -1,0 +1,93 @@
+# ApplicationSet — cert-manager on all workload clusters
+#
+# Manages internal cluster TLS: Kong HTTPS listener cert (DNS-01 via Route53),
+# OPA Gatekeeper webhook certs, mTLS between services.
+# NOT used for public-facing traffic — ACM handles that at CloudFront.
+#
+# Ordering: cert-manager must be running before ClusterIssuer + Certificate
+# resources (in charts/kong-gateway/) can be applied. ArgoCD retry policy
+# handles the ordering: kong-gateway sync will fail and retry until cert-manager
+# webhooks are ready, then succeed within ~60s.
+#
+# Pod Identity: cert-manager ServiceAccount gets route53:ChangeResourceRecordSets
+# on the platform hosted zone. Association created in aj-infra-platform.
+# No IRSA annotation needed — Pod Identity is cluster-level.
+#
+# Images: quay.io/jetstack/* → ECR quay/ pull-through cache.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-cert-manager
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:          "{{metadata.labels.environment}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "cert-manager-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   cert-manager
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        https://charts.jetstack.io
+          chart:          cert-manager
+          targetRevision: "v1.16.3"
+          helm:
+            releaseName: cert-manager
+            valueFiles:
+              - $values/charts/cert-manager/values/{{values.env}}.yaml
+            parameters:
+              # quay.io → ECR quay/ pull-through cache
+              - name:  image.repository
+                value: "{{values.ecr_registry}}/quay/jetstack/cert-manager-controller"
+              - name:  webhook.image.repository
+                value: "{{values.ecr_registry}}/quay/jetstack/cert-manager-webhook"
+              - name:  cainjector.image.repository
+                value: "{{values.ecr_registry}}/quay/jetstack/cert-manager-cainjector"
+              - name:  startupapicheck.image.repository
+                value: "{{values.ecr_registry}}/quay/jetstack/cert-manager-startupapicheck"
+              - name:  acmesolver.image.repository
+                value: "{{values.ecr_registry}}/quay/jetstack/cert-manager-acmesolver"
+
+        - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+          targetRevision: main
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: cert-manager
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m
+
+      ignoreDifferences:
+        - group: admissionregistration.k8s.io
+          kind:  ValidatingWebhookConfiguration
+          jsonPointers:
+            - /webhooks/0/failurePolicy
+            - /webhooks/1/failurePolicy

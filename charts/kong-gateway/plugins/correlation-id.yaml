@@ -1,0 +1,25 @@
+# KongClusterPlugin — correlation-id (global, applied to every request)
+#
+# Adds X-Correlation-ID header to every request that passes through Kong.
+# If the client sends the header, Kong forwards it. If not, Kong generates
+# a UUID v4. Downstream services propagate it in logs and traces.
+#
+# KongClusterPlugin is cluster-scoped — referenced from any namespace via
+# konghq.com/plugins annotation on HTTPRoute or Service.
+#
+# Apply globally: add 'correlation-id' to the konghq.com/plugins annotation
+# on the Kong Gateway resource, or on individual routes.
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: correlation-id
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    global: "true"  # applies to every proxied request when set to "true"
+plugin: correlation-id
+config:
+  header_name: X-Correlation-ID
+  generator: uuid#counter
+  echo_downstream: true

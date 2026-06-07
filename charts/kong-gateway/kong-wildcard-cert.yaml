@@ -1,0 +1,27 @@
+# Certificate — wildcard TLS cert for Kong's HTTPS listener.
+#
+# cert-manager issues this via DNS-01 (ClusterIssuer: letsencrypt-prod)
+# and stores the result as Secret kong-wildcard-tls in the kong namespace.
+# The Gateway resource's HTTPS listener references this Secret by name.
+#
+# Renewal: cert-manager auto-renews 30 days before expiry (default).
+# No manual rotation needed — cert-manager handles the ACME dance.
+#
+# Use letsencrypt-staging issuerRef in dev/staging to avoid rate limits.
+# Swap to letsencrypt-prod when the hosted zone is wired and tested.
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kong-wildcard-tls
+  namespace: kong
+spec:
+  secretName: kong-wildcard-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - "*.aj-platform.io"
+    - "aj-platform.io"
+  duration: 2160h    # 90 days (Let's Encrypt default)
+  renewBefore: 720h  # renew 30 days before expiry

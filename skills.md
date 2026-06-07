@@ -77,6 +77,36 @@ saas/
 ## Branching convention
 - `main` — all ApplicationSets track `main`; PRs required for any change
 
+## P2 Platform Core additions
+
+### cert-manager (`applicationsets/workload/cert-manager.yaml`)
+Deploys cert-manager v1.16.3 to every workload cluster. Issues the Kong wildcard TLS cert via DNS-01/Route53 (Let's Encrypt). Pod Identity grants cert-manager `route53:ChangeResourceRecordSets` — provisioned in aj-infra-platform. Images route through ECR `quay/` pull-through cache. ClusterIssuers (`letsencrypt-prod`, `letsencrypt-staging`) and the `kong-wildcard-tls` Certificate live in `charts/kong-gateway/`.
+
+### Kong platform plugins (`charts/kong-gateway/plugins/`)
+Three platform-level Kong plugins deployed alongside the Gateway:
+- `correlation-id` → `KongClusterPlugin` (`global: "true"`) — adds X-Correlation-ID to every request
+- `jwt` → `KongPlugin` in `kong` namespace — JWT validation; teams attach via annotation
+- `rate-limiting` → `KongPlugin` in `kong` namespace — 1000 req/min per consumer, Valkey-backed; teams attach via annotation
+
+Teams reference plugins:
+```yaml
+annotations:
+  konghq.com/plugins: jwt,rate-limiting   # in their HTTPRoute
+```
+
+### Canary deployments (`charts/rollout-template/`)
+Helm chart implementing Argo Rollouts canary pattern with Gateway API traffic splitting. Replaces the standard Deployment with an Argo `Rollout`. Argo Rollouts patches HTTPRoute `backendRefs` weights in real time.
+
+```
+templates/
+  rollout.yaml            — Rollout (canary strategy, stableService + canaryService)
+  services.yaml           — stable Service + canary Service (weights patched at runtime)
+  httproute.yaml          — HTTPRoute: stable=100/canary=0 initially; Rollouts patches weights
+  analysis-template.yaml  — Prometheus error-rate + p99 latency checks before auto-promote
+```
+
+Canary flow: image update → canary pods created → traffic split at `canary.weight` % → AnalysisTemplate runs 5 Prometheus checks over 5 min → pass: auto-promote to 100% stable; fail: auto-rollback. `canary.pauseDurationSeconds: 0` disables auto-promote (prod pattern — requires manual approval).
+
 ## Golden-path Helm chart: `charts/web-service/`
 
 Standard chart for any stateless web service on the platform. Teams reference it from their app's `helmPath:` in `teams/<team>/<app>.yaml`.

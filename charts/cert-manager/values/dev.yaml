@@ -1,0 +1,47 @@
+# cert-manager — dev
+# installCRDs installs CertificateRequest, Certificate, Issuer, ClusterIssuer, etc.
+installCRDs: true
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi
+
+webhook:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+cainjector:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 128Mi
+
+# Pod Identity — no IRSA annotation needed
+serviceAccount:
+  create: true
+  name: cert-manager
+  annotations: {}
+
+# Prometheus metrics scraping (picked up by k8s-monitoring Alloy config)
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: true
+
+# Extra args passed to the controller
+extraArgs:
+  - --dns01-recursive-nameservers-only
+  - --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53

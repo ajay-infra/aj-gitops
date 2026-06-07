@@ -1,0 +1,49 @@
+# cert-manager — prod
+# 2 controller replicas + 2 webhook replicas for HA.
+# cainjector can remain single replica (not on the request path).
+installCRDs: true
+
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+webhook:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+cainjector:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 256Mi
+
+serviceAccount:
+  create: true
+  name: cert-manager
+  annotations: {}
+
+prometheus:
+  enabled: true
+  servicemonitor:
+    enabled: true
+
+extraArgs:
+  - --dns01-recursive-nameservers-only
+  - --dns01-recursive-nameservers=8.8.8.8:53,1.1.1.1:53

@@ -1,0 +1,28 @@
+# KongPlugin — jwt (namespace: kong)
+#
+# Validates JWT tokens on routes that require authentication.
+# Teams reference this plugin from their HTTPRoute or Service:
+#
+#   annotations:
+#     konghq.com/plugins: jwt
+#
+# The plugin name 'jwt' is looked up in the same namespace as the HTTPRoute,
+# or in the kong namespace when using cross-namespace plugin references.
+#
+# Token issuance is NOT handled by Kong — use your IdP (Cognito, Auth0, etc.)
+# Consumers are created via KongConsumer resources in the team's namespace.
+#
+# config.key_claim_name: the JWT claim that holds the consumer identifier.
+# config.claims_to_verify: 'exp' ensures expired tokens are rejected.
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: jwt
+  namespace: kong
+plugin: jwt
+config:
+  key_claim_name: kid
+  claims_to_verify:
+    - exp
+  maximum_expiration: 3600  # reject tokens valid for more than 1h

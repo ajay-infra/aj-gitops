@@ -1,0 +1,41 @@
+# AnalysisTemplate — success criteria for canary promotion.
+#
+# Argo Rollouts runs two Prometheus queries against the canary pods:
+#   1. HTTP error rate (5xx) must stay below errorRateThreshold
+#   2. p99 latency must stay below latencyThreshold (ms)
+#
+# Both metrics must pass for all `count` intervals before Rollouts auto-promotes.
+# A single failure triggers an immediate rollback to the stable version.
+#
+# Prometheus scrape endpoint: central Mimir (shipped by workload Alloy agents).
+# Adjust the query labels to match your app's actual metric names.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "rollout-template.fullname" . }}-canary-analysis
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "rollout-template.labels" . | nindent 4 }}
+spec:
+  metrics:
+    - name: error-rate
+      interval: {{ .Values.canary.analysis.interval }}
+      count: {{ .Values.canary.analysis.count }}
+      successCondition: result[0] < {{ .Values.canary.analysis.errorRateThreshold }}
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://mimir-query-frontend.monitoring.svc.cluster.local:8080/prometheus
+          query: |
+            {{ .Values.canary.analysis.errorRateQuery | replace "__APP__" (include "rollout-template.fullname" .) | trim }}
+
+    - name: p99-latency
+      interval: {{ .Values.canary.analysis.interval }}
+      count: {{ .Values.canary.analysis.count }}
+      successCondition: result[0] < {{ .Values.canary.analysis.latencyThreshold }}
+      failureLimit: 1
+      provider:
+        prometheus:
+          address: http://mimir-query-frontend.monitoring.svc.cluster.local:8080/prometheus
+          query: |
+            {{ .Values.canary.analysis.latencyQuery | replace "__APP__" (include "rollout-template.fullname" .) | trim }}

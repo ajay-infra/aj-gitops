@@ -1,0 +1,94 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "rollout-template.fullname" . }}
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "rollout-template.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "rollout-template.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "rollout-template.labels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: {{ include "rollout-template.fullname" . }}
+          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.healthCheck.path }}
+              port: {{ .Values.healthCheck.port }}
+            initialDelaySeconds: {{ .Values.healthCheck.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthCheck.liveness.periodSeconds }}
+            failureThreshold: {{ .Values.healthCheck.liveness.failureThreshold }}
+            timeoutSeconds: {{ .Values.healthCheck.liveness.timeoutSeconds }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.healthCheck.path }}
+              port: {{ .Values.healthCheck.port }}
+            initialDelaySeconds: {{ .Values.healthCheck.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.healthCheck.readiness.periodSeconds }}
+            failureThreshold: {{ .Values.healthCheck.readiness.failureThreshold }}
+            timeoutSeconds: {{ .Values.healthCheck.readiness.timeoutSeconds }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+            runAsUser: {{ .Values.securityContext.runAsUser }}
+            allowPrivilegeEscalation: {{ .Values.securityContext.allowPrivilegeEscalation }}
+            readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
+            capabilities:
+              drop: {{ toYaml .Values.securityContext.capabilities.drop | nindent 16 }}
+          {{- with .Values.env }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  strategy:
+    canary:
+      # Stable service receives all traffic before and after rollout.
+      # Canary service receives canary.weight % during rollout.
+      stableService: {{ include "rollout-template.fullname" . }}-stable
+      canaryService: {{ include "rollout-template.fullname" . }}-canary
+
+      # Argo Rollouts patches the HTTPRoute backendRefs weights.
+      trafficRouting:
+        plugins:
+          argoproj-labs/gatewayAPI:
+            httpRoute: {{ include "rollout-template.fullname" . }}
+            namespace: {{ .Values.namespace | default .Release.Namespace }}
+
+      steps:
+        - setWeight: {{ .Values.canary.weight }}
+        - setCanaryScale:
+            replicas: {{ .Values.canary.replicaCount }}
+        {{- if .Values.canary.pauseDurationSeconds }}
+        - pause:
+            duration: {{ .Values.canary.pauseDurationSeconds }}s
+        {{- else }}
+        - pause: {}   # indefinite pause — requires manual promotion
+        {{- end }}
+        - analysis:
+            templates:
+              - templateName: {{ include "rollout-template.fullname" . }}-canary-analysis
+        - setWeight: 100

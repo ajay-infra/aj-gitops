@@ -1,0 +1,32 @@
+{{- if .Values.httpRoute.enabled }}
+# HTTPRoute with two backendRefs — Argo Rollouts patches the weights at runtime.
+# Initial state: stable=100, canary=0.
+# During rollout: stable={{ sub 100 .Values.canary.weight }}, canary={{ .Values.canary.weight }}.
+# After promotion: stable=100, canary=0.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ include "rollout-template.fullname" . }}
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "rollout-template.labels" . | nindent 4 }}
+spec:
+  parentRefs:
+    - name: {{ .Values.httpRoute.parentRef.name }}
+      namespace: {{ .Values.httpRoute.parentRef.namespace }}
+      sectionName: {{ .Values.httpRoute.parentRef.sectionName }}
+  hostnames:
+    - {{ required "httpRoute.hostname is required when httpRoute.enabled=true" .Values.httpRoute.hostname | quote }}
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: {{ include "rollout-template.fullname" . }}-stable
+          port: {{ .Values.service.port }}
+          weight: 100
+        - name: {{ include "rollout-template.fullname" . }}-canary
+          port: {{ .Values.service.port }}
+          weight: 0
+{{- end }}

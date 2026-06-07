@@ -1,0 +1,39 @@
+# KongPlugin — rate-limiting-advanced (namespace: kong)
+#
+# Per-consumer, per-minute rate limiting backed by Valkey (Redis-compatible).
+# Using 'redis' strategy so counters are shared across all Kong proxy replicas.
+# Valkey endpoint is set via the connection env var passed to Kong proxy pods
+# (set in charts/kong/values/<env>.yaml under env.KONG_REDIS_HOST).
+#
+# Teams reference this plugin from their HTTPRoute or Service:
+#
+#   annotations:
+#     konghq.com/plugins: rate-limiting
+#
+# For per-route limits that differ from the platform default, teams can define
+# their own KongPlugin in their namespace with custom limit values and reference
+# that instead.
+#
+# limit: 1000 req/min per consumer is the platform default.
+# Routes that need tighter limits should create their own KongPlugin.
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: rate-limiting
+  namespace: kong
+plugin: rate-limiting-advanced
+config:
+  limit:
+    - 1000          # requests per window
+  window_size:
+    - 60            # 60-second window
+  identifier: consumer
+  strategy: redis
+  redis:
+    host: valkey.data.svc.cluster.local
+    port: 6379
+    timeout: 2000
+    database: 1     # DB 1 reserved for Kong rate limit counters
+  hide_client_headers: false
+  retry_after_jitter_max: 0
