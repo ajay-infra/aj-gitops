@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "web-service.fullname" . }}
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "web-service.labels" . | nindent 4 }}
+  {{- if .Values.httpRoute.enabled }}
+  annotations:
+    # Kong reads this annotation to find the upstream service
+    konghq.com/protocol: http
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+    {{- if .Values.serviceMonitor.enabled }}
+    - name: metrics
+      port: {{ .Values.serviceMonitor.port }}
+      targetPort: {{ .Values.serviceMonitor.port }}
+      protocol: TCP
+    {{- end }}
+  selector:
+    {{- include "web-service.selectorLabels" . | nindent 4 }}

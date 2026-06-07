@@ -1,0 +1,39 @@
+{{- if .Values.keda.enabled }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "web-service.fullname" . }}
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "web-service.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "web-service.fullname" . }}
+  minReplicaCount: {{ .Values.keda.minReplicas }}
+  maxReplicaCount: {{ .Values.keda.maxReplicas }}
+  pollingInterval: {{ .Values.keda.pollingInterval }}
+  cooldownPeriod: {{ .Values.keda.cooldownPeriod }}
+  triggers:
+    {{- if eq .Values.keda.triggerType "prometheus" }}
+    - type: prometheus
+      metadata:
+        serverAddress: {{ .Values.keda.prometheus.serverAddress | quote }}
+        metricName: {{ .Values.keda.prometheus.metricName | quote }}
+        query: {{ .Values.keda.prometheus.query | quote }}
+        threshold: {{ .Values.keda.prometheus.threshold | quote }}
+    {{- else if eq .Values.keda.triggerType "http" }}
+    - type: http
+      metadata:
+        url: {{ .Values.keda.http.url | quote }}
+        targetPendingRequests: {{ .Values.keda.http.targetPendingRequests | quote }}
+    {{- else if eq .Values.keda.triggerType "sqs" }}
+    - type: aws-sqs-queue
+      metadata:
+        queueURL: {{ .Values.keda.sqs.queueURL | quote }}
+        queueLength: {{ .Values.keda.sqs.queueLength | quote }}
+        awsRegion: {{ .Values.keda.sqs.awsRegion | quote }}
+        identityOwner: pod
+    {{- end }}
+{{- end }}

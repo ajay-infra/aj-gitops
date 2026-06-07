@@ -1,0 +1,153 @@
+# ── Identity ──────────────────────────────────────────────────────────────────
+# Required — set in every team values override.
+app: ""             # service name  →  app.kubernetes.io/name
+team: ""            # team slug     →  team label + RoleBinding subject
+namespace: ""       # K8s namespace
+env: dev            # dev | staging | uat | prod → drives PDB minAvailable + KEDA minReplicas
+component: backend  # backend | frontend | worker | cache | db → app.kubernetes.io/component
+version: latest     # app version   →  app.kubernetes.io/version
+
+# ── Image ─────────────────────────────────────────────────────────────────────
+image:
+  repository: ""          # full ECR repo URL — e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/my-app
+  tag: ""                 # image tag — never use "latest" in prod; pin to digest or semver
+  pullPolicy: IfNotPresent
+
+# ── Replicas ──────────────────────────────────────────────────────────────────
+# Ignored when keda.enabled=true (KEDA manages replica count).
+replicaCount: 2
+
+# ── Container port ────────────────────────────────────────────────────────────
+containerPort: 8080
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+
+# ── Health checks ─────────────────────────────────────────────────────────────
+healthCheck:
+  path: /health
+  port: 8080
+  liveness:
+    initialDelaySeconds: 15
+    periodSeconds: 20
+    failureThreshold: 3
+    timeoutSeconds: 5
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    failureThreshold: 3
+    timeoutSeconds: 3
+
+# ── Service ───────────────────────────────────────────────────────────────────
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# ── Security context ──────────────────────────────────────────────────────────
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false   # flip to true if app writes nothing to disk
+  capabilities:
+    drop: ["ALL"]
+
+# ── Topology spread ───────────────────────────────────────────────────────────
+# Spreads pods across availability zones to match zone-local traffic design.
+topologySpread:
+  enabled: true
+  maxSkew: 1
+  whenUnsatisfiable: DoNotSchedule   # ScheduleAnyway for dev if < 3 nodes
+
+# ── Pod Disruption Budget ─────────────────────────────────────────────────────
+pdb:
+  enabled: true
+  # dev/staging: 1, prod: 2 — set explicitly per environment in values override
+  minAvailable: 1
+
+# ── HTTPRoute (Gateway API) ───────────────────────────────────────────────────
+httpRoute:
+  enabled: true
+  hostname: ""           # e.g. api.example.com — required when enabled
+  tls: true              # expects HTTPS listener on the Gateway
+  parentRef:
+    name: kong
+    namespace: kong
+    sectionName: https   # https | http — matches listener name in Gateway
+  paths:
+    - path: /
+      type: PathPrefix
+  # Kong plugins to attach (must exist in the same namespace)
+  plugins: []
+  # plugins:
+  #   - jwt-auth
+  #   - rate-limiting
+
+# ── ServiceMonitor (Prometheus / Mimir) ──────────────────────────────────────
+serviceMonitor:
+  enabled: true
+  path: /metrics
+  port: 8080             # must match a named port on the Service or container port
+  interval: 30s
+  scrapeTimeout: 10s
+  # Namespace where Prometheus/Mimir operator is watching for ServiceMonitors
+  monitoringNamespace: monitoring
+
+# ── KEDA ScaledObject ─────────────────────────────────────────────────────────
+# Replaces HPA. Do NOT create an HPA alongside this.
+keda:
+  enabled: true
+  # dev: 0 (scale to zero), prod: 2 (always-on SLA)
+  minReplicas: 0
+  maxReplicas: 10
+  pollingInterval: 30     # seconds between KEDA metric polls
+  cooldownPeriod: 60      # seconds after last trigger before scaling down
+
+  # Trigger type: prometheus | http | sqs
+  # prometheus — scale on Mimir metric (default for web services)
+  # http        — scale on HTTP request rate via KEDA HTTP add-on
+  # sqs         — scale on SQS queue depth (workers/consumers)
+  triggerType: prometheus
+
+  prometheus:
+    serverAddress: http://mimir-nginx.monitoring.svc.cluster.local
+    # metricName and query are auto-generated from .Values.app and .Values.namespace
+    # Override if you need a custom metric:
+    metricNameOverride: ""
+    queryOverride: ""
+    # Scale up when average RPS per replica exceeds this threshold
+    threshold: "100"
+
+  http:
+    # Requires KEDA HTTP add-on installed on the cluster
+    targetPendingRequests: "100"
+
+  sqs:
+    queueURL: ""
+    queueLength: "5"       # scale up when queue depth per replica exceeds this
+    awsRegion: us-east-1
+
+# ── Extra environment variables ───────────────────────────────────────────────
+env: []
+# env:
+#   - name: LOG_LEVEL
+#     value: info
+#   - name: DB_SECRET_ARN
+#     valueFrom:
+#       secretKeyRef:
+#         name: aurora-connection
+#         key: secret_arn
+
+# ── Extra volume mounts ───────────────────────────────────────────────────────
+volumeMounts: []
+volumes: []
+
+# ── Pod annotations ───────────────────────────────────────────────────────────
+podAnnotations: {}

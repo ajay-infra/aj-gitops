@@ -1,0 +1,13 @@
+apiVersion: v2
+name: web-service
+description: |
+  Golden-path Helm chart for any stateless web service on the platform.
+  Includes: Deployment, Service, PodDisruptionBudget, HTTPRoute (Gateway API),
+  ServiceMonitor (Prometheus), and KEDA ScaledObject.
+  Teams configure via values — no custom templates needed.
+type: application
+version: 0.1.0
+keywords:
+  - platform
+  - web
+  - service

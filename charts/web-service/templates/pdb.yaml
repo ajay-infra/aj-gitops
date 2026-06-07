@@ -1,0 +1,17 @@
+{{- if .Values.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "web-service.fullname" . }}
+  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "web-service.labels" . | nindent 4 }}
+spec:
+  # dev/staging: minAvailable=1 — allows one pod down at a time during node drain
+  # prod:        minAvailable=2 — ensures at least two pods are always serving
+  # Set in env-specific values override: pdb.minAvailable: 2
+  minAvailable: {{ .Values.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "web-service.selectorLabels" . | nindent 6 }}
+{{- end }}
