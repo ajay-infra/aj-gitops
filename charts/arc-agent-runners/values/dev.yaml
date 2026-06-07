@@ -1,0 +1,48 @@
+# ARC Agent Runner Scale Set — dev
+# Targeted by: runs-on: [self-hosted, agent, dev]
+githubConfigUrl: "https://github.com/ajay-infra"
+githubConfigSecret: "arc-github-app-secret"
+
+runnerScaleSetName: "agent-dev"
+
+minRunners: 0   # scale to zero when no agent tasks queued
+maxRunners: 3
+
+template:
+  spec:
+    serviceAccountName: arc-agent-dev   # Pod Identity role: read Secrets Manager
+    containers:
+      - name: runner
+        # Image built by aj-infra-release build-agent-runner.yml
+        # Contains: actions-runner + Claude Code CLI + kubectl + helm + terraform + aws cli
+        image: PLACEHOLDER_ECR/platform/arc-agent-runner:latest
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi
+        env:
+          # ESO populates the kubernetes Secret; ARC injects it here
+          - name: ANTHROPIC_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: anthropic-api-key
+                key: api_key
+          - name: GITHUB_AGENT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: github-agent-pat
+                key: token
+          # AWS region for kubectl/AWS CLI calls inside agent tasks
+          - name: AWS_REGION
+            value: us-east-1
+          - name: AWS_DEFAULT_REGION
+            value: us-east-1
+        volumeMounts:
+          - name: work
+            mountPath: /home/runner/_work
+    volumes:
+      - name: work
+        emptyDir: {}

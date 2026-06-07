@@ -1,0 +1,44 @@
+# ARC Agent Runner Scale Set — staging
+# Targeted by: runs-on: [self-hosted, agent, staging]
+githubConfigUrl: "https://github.com/ajay-infra"
+githubConfigSecret: "arc-github-app-secret"
+
+runnerScaleSetName: "agent-staging"
+
+minRunners: 0
+maxRunners: 3
+
+template:
+  spec:
+    serviceAccountName: arc-agent-staging
+    containers:
+      - name: runner
+        image: PLACEHOLDER_ECR/platform/arc-agent-runner:latest
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+          limits:
+            cpu: "2"
+            memory: 4Gi
+        env:
+          - name: ANTHROPIC_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: anthropic-api-key
+                key: api_key
+          - name: GITHUB_AGENT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: github-agent-pat
+                key: token
+          - name: AWS_REGION
+            value: us-east-1
+          - name: AWS_DEFAULT_REGION
+            value: us-east-1
+        volumeMounts:
+          - name: work
+            mountPath: /home/runner/_work
+    volumes:
+      - name: work
+        emptyDir: {}

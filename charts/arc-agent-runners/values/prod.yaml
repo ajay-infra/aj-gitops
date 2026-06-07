@@ -1,0 +1,46 @@
+# ARC Agent Runner Scale Set — prod
+# Targeted by: runs-on: [self-hosted, agent, prod]
+# Agents on prod runners have prod AWS access via Pod Identity.
+# Dispatch requires infra-lead approval (GitHub environment protection rule).
+githubConfigUrl: "https://github.com/ajay-infra"
+githubConfigSecret: "arc-github-app-secret"
+
+runnerScaleSetName: "agent-prod"
+
+minRunners: 0
+maxRunners: 5
+
+template:
+  spec:
+    serviceAccountName: arc-agent-prod
+    containers:
+      - name: runner
+        image: PLACEHOLDER_ECR/platform/arc-agent-runner:latest
+        resources:
+          requests:
+            cpu: "2"
+            memory: 4Gi
+          limits:
+            cpu: "4"
+            memory: 8Gi
+        env:
+          - name: ANTHROPIC_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: anthropic-api-key
+                key: api_key
+          - name: GITHUB_AGENT_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: github-agent-pat
+                key: token
+          - name: AWS_REGION
+            value: us-east-1
+          - name: AWS_DEFAULT_REGION
+            value: us-east-1
+        volumeMounts:
+          - name: work
+            mountPath: /home/runner/_work
+    volumes:
+      - name: work
+        emptyDir: {}

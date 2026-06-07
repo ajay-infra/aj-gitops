@@ -1,0 +1,64 @@
+# ApplicationSet — ESO ExternalSecrets for the agent runner namespace
+#
+# Deploys ExternalSecret objects that pull:
+#   - anthropic-api-key  → ANTHROPIC_API_KEY env var in agent pods
+#   - github-agent-pat   → GITHUB_TOKEN override for cross-repo git operations
+#
+# These secrets must exist in arc-runners namespace before arc-agent-runner-sets
+# can start pods. Sync-wave ensures ordering within ArgoCD, but ARC itself will
+# retry pod creation until the Kubernetes Secrets are present.
+#
+# Secrets Manager paths (created by aj-infra-release bootstrap):
+#   aj-platform/anthropic/api-key      → SecretString: {"api_key": "sk-ant-..."}
+#   aj-platform/github/agent-pat       → SecretString: {"token": "ghp_..."}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: arc-agent-extras
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:      "{{metadata.labels.environment}}"
+          autoSync: "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "arc-agent-extras-{{name}}"
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-wave: "-1"   # secrets before runner pods
+      labels:
+        environment: "{{values.env}}"
+        component:   arc-agent-extras
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      source:
+        repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+        targetRevision: main
+        path:           charts/arc-agent-extras
+
+      destination:
+        server:    "{{server}}"
+        namespace: arc-runners
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=false
+          - ServerSideApply=true
+        retry:
+          limit: 5
+          backoff:
+            duration:    15s
+            factor:      2
+            maxDuration: 2m

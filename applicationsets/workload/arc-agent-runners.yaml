@@ -1,0 +1,78 @@
+# ApplicationSet — Claude Code agent runner scale set on all workload clusters
+#
+# Separate from the standard CI runners (arc-runners.yaml). These runners:
+#   - Run the custom agent image (actions-runner + Claude Code CLI + infra tools)
+#   - Have larger resources (Claude Code needs RAM for context)
+#   - Have ANTHROPIC_API_KEY injected via ESO
+#   - Have no DinD sidecar (agents don't build Docker images)
+#   - Are targeted with: runs-on: [self-hosted, agent, <env>]
+#
+# Prerequisites per cluster:
+#   1. workload-arc-controller Application synced
+#   2. ESO ClusterSecretStore "aws-secrets-manager" active
+#   3. arc-agent-extras Application synced (creates ExternalSecrets below)
+#   4. Pod Identity association for arc-agent-<env> service account
+#
+# The agent image is built by .github/workflows/build-agent-runner.yml in
+# aj-infra-release and pushed to ECR. ECR repo: platform/arc-agent-runner.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: arc-agent-runner-sets
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+        values:
+          env:          "{{metadata.labels.environment}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "arc-agent-runners-{{values.env}}-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   arc-agent-runners
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        "oci://{{values.ecr_registry}}/ghcr/actions/actions-runner-controller-charts"
+          chart:          gha-runner-scale-set
+          targetRevision: "0.9.3"
+          helm:
+            releaseName: "arc-agent-{{values.env}}"
+            valueFiles:
+              - $values/charts/arc-agent-runners/values/{{values.env}}.yaml
+            parameters:
+              - name:  template.spec.containers[0].image
+                value: "{{values.ecr_registry}}/platform/arc-agent-runner:latest"
+
+        - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+          targetRevision: main
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: arc-runners
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=false  # created by arc-runners ApplicationSet
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m
