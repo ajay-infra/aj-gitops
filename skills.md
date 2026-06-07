@@ -77,6 +77,37 @@ saas/
 ## Branching convention
 - `main` — all ApplicationSets track `main`; PRs required for any change
 
+## Golden-path Helm chart: `charts/web-service/`
+
+Standard chart for any stateless web service on the platform. Teams reference it from their app's `helmPath:` in `teams/<team>/<app>.yaml`.
+
+```
+charts/web-service/
+  Chart.yaml
+  values.yaml             — full defaults; override per env via deployments/ and environments/<env>/
+  templates/
+    _helpers.tpl          — fullname, labels, selectorLabels
+    deployment.yaml       — maxUnavailable=0 rolling, zone topology spread, pod anti-affinity,
+                            terminationGracePeriodSeconds=30, drop-ALL securityContext,
+                            conditional env/volumeMounts/volumes
+    service.yaml          — ClusterIP + optional metrics port; konghq.com/protocol annotation
+    pdb.yaml              — minAvailable configurable (1=dev, 2=prod via override)
+    httproute.yaml        — Gateway API HTTPRoute → kong/kong parentRef; konghq.com/plugins
+    servicemonitor.yaml   — ServiceMonitor in monitoring namespace (Prometheus/Mimir scraping)
+    scaledobject.yaml     — KEDA ScaledObject; triggerType: prometheus | http | sqs
+```
+
+Key values structure:
+- `keda.enabled: true` suppresses `replicas:` from Deployment (KEDA controls replica count)
+- `httpRoute.enabled` gates both HTTPRoute and the `konghq.com/protocol` Service annotation
+- `serviceMonitor.enabled` gates ServiceMonitor + adds a metrics port to Service and Deployment
+- Three-layer override: chart defaults → `deployments/<team>/<app>/values.yaml` → `environments/<env>/values.yaml`
+
+KEDA trigger types and their required values keys:
+- `prometheus` → `keda.prometheus.{serverAddress, metricName, query, threshold}`
+- `http` → `keda.http.{url, targetPendingRequests}`
+- `sqs` → `keda.sqs.{queueURL, queueLength, awsRegion}` (uses pod identity — no static keys)
+
 ## Agentic capabilities
 - Detect clusters missing `model` label (not properly registered)
 - Generate PR to add a new team app config to teams/
