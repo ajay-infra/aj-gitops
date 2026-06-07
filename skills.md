@@ -138,10 +138,21 @@ KEDA trigger types and their required values keys:
 - `http` → `keda.http.{url, targetPendingRequests}`
 - `sqs` → `keda.sqs.{queueURL, queueLength, awsRegion}` (uses pod identity — no static keys)
 
-## Agentic capabilities
-- Detect clusters missing `model` label (not properly registered)
-- Generate PR to add a new team app config to teams/
-- Generate PR to add a new customer to saas/customers/
-- Detect ApplicationSet drift (sync warnings, failed syncs)
-- Weekly scan: list clusters by model breakdown
-- Flip k8s-manifests enforcementAction warn→deny for a policy after compliance confirmed
+## File Naming Conventions
+
+| Resource | Location | Naming |
+|---|---|---|
+| Team namespace | `teams/<team>/namespace.yaml` | fixed filename |
+| Team app | `teams/<team>/<app>.yaml` | app slug matches Helm release name |
+| SaaS customer | `saas/customers/<customer>.yaml` | customer slug, lowercase |
+| Helm values | `charts/<component>/values/<env>.yaml` | env = dev/staging/prod or nonprod/prod |
+| ApplicationSet | `applicationsets/workload/<component>.yaml` | component matches Application name prefix |
+
+## Important Invariants
+
+- All ApplicationSets track `main` branch — PRs required for any change
+- Team namespace YAMLs drive the git-file-generator in `apps.yaml` AppSet
+- Cluster Secrets must have `tier: workload` + `environment` + `model` + `auto_sync` labels
+  for ApplicationSet generators to pick them up
+- Sync-wave -1 on namespace ApplicationSets (namespace must exist before app workloads)
+- `auto_sync: "true"` → dev + staging; `auto_sync: "false"` → prod (manual sync in ArgoCD UI)
