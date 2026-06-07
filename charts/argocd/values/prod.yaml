@@ -26,11 +26,21 @@ configs:
 
   rbac:
     policy.csv: |
-      # infra-lead only can sync prod
+      # infra-lead: full admin — only group that can sync prod
       g, ajay-infra:infra-lead, role:admin
-      # infra-core: view + manual sync on staging, readonly on prod
-      g, ajay-infra:infra-core, role:readonly
+
+      # infra-core: read + get on prod; CANNOT sync prod (explicit deny)
+      p, role:infra-core, applications, get, prod/*, allow
       p, role:infra-core, applications, sync, prod/*, deny
+      p, role:infra-core, applications, *, nonprod/*, allow
+      p, role:infra-core, repositories, get, *, allow
+      p, role:infra-core, clusters, get, *, allow
+      p, role:infra-core, projects, get, *, allow
+      g, ajay-infra:infra-core, role:infra-core
+
+      # engineers: readonly only; no sync on prod regardless of AppProject roles
+      g, ajay-infra:engineers, role:readonly
+      p, role:readonly, applications, sync, prod/*, deny
     policy.default: role:readonly
 
   params:

@@ -23,9 +23,22 @@ configs:
 
   rbac:
     policy.csv: |
-      # infra-core team: admin on dev + staging projects
-      g, ajay-infra:infra-core, role:admin
-      # readonly for all other org members
+      # infra-lead: full admin on everything
+      g, ajay-infra:infra-lead, role:admin
+
+      # infra-core: admin on all nonprod; can create/sync/delete in dev + staging
+      p, role:infra-core, applications, *, nonprod/*, allow
+      p, role:infra-core, applications, *, dev/*, allow
+      p, role:infra-core, applications, *, staging/*, allow
+      p, role:infra-core, repositories, get, *, allow
+      p, role:infra-core, clusters, get, *, allow
+      p, role:infra-core, projects, get, *, allow
+      g, ajay-infra:infra-core, role:infra-core
+
+      # engineers: readonly cluster-wide; AppProject roles (auto-added by register-namespace.yml)
+      # grant sync on their own namespace apps:
+      #   p, proj:<team>:developer, applications, sync, <team>/*, allow
+      #   g, ajay-infra:<team>-engineers, proj:<team>:developer
       g, ajay-infra:engineers, role:readonly
     policy.default: role:readonly
 
