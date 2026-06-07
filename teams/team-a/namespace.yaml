@@ -1,0 +1,8 @@
+# Namespace config for team-a — read by the namespace-onboarding ApplicationSet.
+# This file provisions the namespace on every registered workload cluster.
+# Replace with real values when team-a onboards.
+namespace: team-a
+team: team-a
+githubTeam: team-a       # GitHub team name within ajay-infra org
+model: internal          # internal | saas-pooled | saas-dedicated
+customer: ""             # empty for internal namespaces

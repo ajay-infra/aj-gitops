@@ -1,0 +1,43 @@
+namespace: ""       # K8s namespace name
+team: ""            # team slug — matches label taxonomy
+env: dev            # dev | staging | uat | prod
+model: internal     # internal | saas-pooled | saas-dedicated
+customer: ""        # org slug; empty for internal namespaces
+githubOrg: ajay-infra
+githubTeam: ""      # GitHub team name within githubOrg
+
+# ResourceQuota per environment
+quotas:
+  dev:
+    requests.cpu:    "2"
+    requests.memory: "2Gi"
+    limits.cpu:      "8"
+    limits.memory:   "8Gi"
+    pods:            "30"
+  staging:
+    requests.cpu:    "4"
+    requests.memory: "4Gi"
+    limits.cpu:      "16"
+    limits.memory:   "16Gi"
+    pods:            "50"
+  uat:
+    requests.cpu:    "2"
+    requests.memory: "2Gi"
+    limits.cpu:      "8"
+    limits.memory:   "8Gi"
+    pods:            "30"
+  prod:
+    requests.cpu:    "8"
+    requests.memory: "8Gi"
+    limits.cpu:      "32"
+    limits.memory:   "32Gi"
+    pods:            "100"
+
+# LimitRange — default requests/limits applied when containers don't specify them
+limitRange:
+  defaultCPURequest:    "100m"
+  defaultMemoryRequest: "128Mi"
+  defaultCPULimit:      "500m"
+  defaultMemoryLimit:   "512Mi"
+  maxCPU:               "4"
+  maxMemory:            "4Gi"

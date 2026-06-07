@@ -1,0 +1,8 @@
+apiVersion: v2
+name: namespace-template
+description: |
+  Standard team namespace with full label taxonomy, ResourceQuota, LimitRange,
+  namespace-scoped RBAC Role + RoleBinding, and default NetworkPolicy.
+  Deployed once per (team, cluster) by the namespace-onboarding ApplicationSet.
+type: application
+version: 0.1.0

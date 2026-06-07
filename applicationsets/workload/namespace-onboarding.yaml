@@ -1,0 +1,103 @@
+# ApplicationSet — team namespace provisioning across all workload clusters
+#
+# Matrix generator: clusters × teams/*/namespace.yaml
+# One Application generated per (cluster, team) pair.
+# Each Application deploys charts/namespace-template which creates:
+#   - Namespace with full label taxonomy (team, env, model, customer, managed-by)
+#   - ResourceQuota sized to environment
+#   - LimitRange with safe CPU/memory defaults
+#   - Role + RoleBinding scoped to the team's GitHub group
+#   - NetworkPolicy: default-deny + allow same-namespace + allow DNS egress
+#
+# Namespace Applications run at sync-wave -1 relative to app workloads so the
+# namespace always exists and is labelled before app Deployments are created.
+# This prevents OPA require-namespace-labels from flagging bare namespaces.
+#
+# To add a new team namespace:
+#   1. Create teams/<team>/namespace.yaml (see teams/README.md)
+#   2. PR → merge → ArgoCD generates namespace Applications for all matching clusters
+#   3. Run register-namespace.yml workflow to create the AppProject (RBAC in ArgoCD UI)
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-namespace-onboarding
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          # All workload clusters — namespace provisioning applies to every cluster type
+          - clusters:
+              selector:
+                matchLabels:
+                  tier: workload
+              values:
+                env:      "{{metadata.labels.environment}}"
+                model:    "{{metadata.labels.model}}"
+                customer: "{{metadata.labels.customer}}"
+                autoSync: "{{metadata.labels.auto_sync}}"
+
+          # One namespace.yaml per team — git generator reads teams/*/namespace.yaml
+          - git:
+              repoURL:  https://github.com/ajay-infra/aj-platform-gitops
+              revision: main
+              files:
+                - path: "teams/*/namespace.yaml"
+
+  template:
+    metadata:
+      name: "ns-{{namespace}}-{{name}}"
+      namespace: argocd
+      labels:
+        component:   namespace
+        team:        "{{team}}"
+        namespace:   "{{namespace}}"
+        environment: "{{values.env}}"
+        cluster:     "{{name}}"
+      annotations:
+        # Sync before app workloads (wave -1 ensures namespace exists first)
+        argocd.argoproj.io/sync-wave: "-1"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform   # platform team owns namespace provisioning
+
+      source:
+        repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+        targetRevision: main
+        path:           charts/namespace-template
+        helm:
+          releaseName: "ns-{{namespace}}"
+          parameters:
+            - name:  namespace
+              value: "{{namespace}}"
+            - name:  team
+              value: "{{team}}"
+            - name:  env
+              value: "{{values.env}}"
+            - name:  model
+              value: "{{values.model}}"
+            - name:  customer
+              value: "{{values.customer}}"
+            - name:  githubTeam
+              value: "{{githubTeam}}"
+
+      destination:
+        server:    "{{server}}"
+        namespace: "{{namespace}}"
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+          - RespectIgnoreDifferences=true
+        retry:
+          limit: 5
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 3m

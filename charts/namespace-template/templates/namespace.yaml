@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}
+  labels:
+    # Label taxonomy — required by OPA require-namespace-labels policy
+    team:       {{ .Values.team }}
+    env:        {{ .Values.env }}
+    model:      {{ .Values.model }}
+    customer:   {{ .Values.customer | quote }}
+    managed-by: argocd
+    # Standard K8s recommended labels
+    app.kubernetes.io/managed-by: argocd

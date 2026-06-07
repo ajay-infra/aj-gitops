@@ -1,23 +1,44 @@
 # teams/
 
-One directory per team. One YAML file per application (service).
+One directory per team. Two file types per team directory:
 
-The `workload-apps` ApplicationSet reads all `teams/*/*.yaml` files and generates
-one ArgoCD Application per (cluster, team-app) pair automatically.
+| File | Read by | Purpose |
+|---|---|---|
+| `namespace.yaml` | `namespace-onboarding` AppSet | Provisions namespace + labels + quota + RBAC on every cluster |
+| `<app-name>.yaml` | `workload-apps` AppSet | Deploys that app's Helm chart on every matching cluster |
 
 ## How to onboard a team
 
-1. Create `teams/<team-slug>/<app-name>.yaml` for each service
-2. Open PR → CI validates YAML
-3. Merge → ArgoCD picks up within ~30s on dev/staging clusters
-4. Run `register-namespace.yml` to create the AppProject for the team
+1. Create `teams/<team>/namespace.yaml` — provisions the namespace on every cluster
+2. Create `teams/<team>/<app>.yaml` for each service — deploys app workloads
+3. Open PR → CI validates YAML
+4. Merge → ArgoCD picks up both within ~30s on dev/staging clusters
+5. Run `register-namespace.yml` to create the AppProject (ArgoCD UI RBAC)
 
-## File schema
+## namespace.yaml schema
 
 ```yaml
-# teams/<team>/<app>.yaml
+# teams/<team>/namespace.yaml — ONE per team (not per app)
+namespace: team-a       # K8s namespace name
+team: team-a            # team slug — matches label taxonomy
+githubTeam: team-a      # GitHub team name within ajay-infra org
+model: internal         # internal | saas-pooled | saas-dedicated
+customer: ""            # empty for internal namespaces
+```
+
+What this provisions on every registered workload cluster:
+- Namespace with full label taxonomy (team, env, model, customer, managed-by)
+- ResourceQuota sized to environment (dev/staging/prod have different limits)
+- LimitRange with safe CPU/memory defaults (prevents unbounded containers)
+- Role + RoleBinding: `ajay-infra:<githubTeam>` group gets deployer permissions
+- NetworkPolicy: default-deny + allow same-namespace + allow DNS egress
+
+## app.yaml schema
+
+```yaml
+# teams/<team>/<app-name>.yaml — one per service
 team: team-a                                           # team slug — matches label taxonomy
-namespace: team-a                                      # K8s namespace (must match AppProject)
+namespace: team-a                                      # K8s namespace (must match namespace.yaml)
 app: api-server                                        # service name — must be unique within namespace
 repoURL: https://github.com/ajay-infra/team-a-services # team's GitHub repo
 helmPath: helm/api-server                              # path to Helm chart in team repo

@@ -1,0 +1,61 @@
+---
+# Default-deny all ingress and egress — explicit NetworkPolicies allow specific traffic.
+# This enforces zero-trust within the cluster: pods must be explicitly allowed to talk.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: {{ .Values.namespace }}
+  labels:
+    team: {{ .Values.team }}
+    env:  {{ .Values.env }}
+spec:
+  podSelector: {}     # applies to all pods in namespace
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow all traffic within the same namespace (intra-team communication).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-same-namespace
+  namespace: {{ .Values.namespace }}
+  labels:
+    team: {{ .Values.team }}
+    env:  {{ .Values.env }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+---
+# Allow egress to kube-dns (CoreDNS) — required for all pods to resolve service names.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: {{ .Values.namespace }}
+  labels:
+    team: {{ .Values.team }}
+    env:  {{ .Values.env }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

@@ -1,0 +1,62 @@
+---
+# Role — namespace-scoped permissions for the team.
+# viewer:   read-only across all resources in namespace
+# deployer: full control within namespace (no cluster-scoped resources)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ .Values.team }}-deployer
+  namespace: {{ .Values.namespace }}
+  labels:
+    team: {{ .Values.team }}
+    env:  {{ .Values.env }}
+rules:
+  - apiGroups: ["", "apps", "batch", "autoscaling", "policy"]
+    resources:
+      - pods
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+      - jobs
+      - cronjobs
+      - services
+      - configmaps
+      - secrets
+      - persistentvolumeclaims
+      - horizontalpodautoscalers
+      - poddisruptionbudgets
+      - endpoints
+      - serviceaccounts
+    verbs: ["*"]
+  # Argo Rollouts
+  - apiGroups: ["argoproj.io"]
+    resources: ["rollouts", "analysistemplates", "analysisruns", "experiments"]
+    verbs: ["*"]
+  # KEDA
+  - apiGroups: ["keda.sh"]
+    resources: ["scaledobjects", "scaledjobs", "triggerauthentications"]
+    verbs: ["*"]
+  # Read-only: cluster resources the team needs visibility into
+  - apiGroups: [""]
+    resources: ["nodes", "namespaces"]
+    verbs: ["get", "list", "watch"]
+---
+# RoleBinding — bind deployer Role to the team's GitHub group.
+# GitHub teams appear in ArgoCD/K8s as: <githubOrg>:<githubTeam>
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.team }}-deployer-binding
+  namespace: {{ .Values.namespace }}
+  labels:
+    team: {{ .Values.team }}
+    env:  {{ .Values.env }}
+subjects:
+  - kind: Group
+    name: {{ .Values.githubOrg }}:{{ .Values.githubTeam }}
+    apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: {{ .Values.team }}-deployer
+  apiGroup: rbac.authorization.k8s.io
