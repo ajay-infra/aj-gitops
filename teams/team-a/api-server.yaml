@@ -1,0 +1,7 @@
+# Sample team-a application config — replace with real values when team-a onboards.
+# Remove this file or replace its content; the filename must be <app-name>.yaml.
+team: team-a
+namespace: team-a
+app: api-server
+repoURL: https://github.com/ajay-infra/team-a-services
+helmPath: helm/api-server

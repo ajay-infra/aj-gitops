@@ -1,0 +1,88 @@
+# ApplicationSet — customer namespaces on SaaS-pooled clusters (UAT)
+#
+# Matrix generator: saas-pooled clusters × saas/customers/*.yaml
+# One Application generated per (pooled-cluster, customer) pair.
+# Each Application deploys saas/namespace-template — a Helm chart that creates:
+#   - Namespace with full label taxonomy (model, customer, env, team)
+#   - ResourceQuota per customer tier (free | pro | enterprise)
+#   - RBAC placeholder for customer's GitHub team
+#
+# For SaaS-dedicated clusters (model=saas-dedicated):
+#   Full platform already deploys via tier=workload selector.
+#   Customer workload apps deploy via their own repo → register-namespace.yml.
+#
+# Sync policy: always auto-sync for UAT (namespace provisioning is infra, not app).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: saas-customer-namespaces
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          # SaaS-pooled UAT clusters only
+          - clusters:
+              selector:
+                matchLabels:
+                  tier: workload
+                  model: saas-pooled
+              values:
+                env: "{{metadata.labels.environment}}"
+
+          # One YAML file per customer — git generator reads saas/customers/*.yaml
+          # Each file provides: customer, customerTier, namespace
+          - git:
+              repoURL:  https://github.com/ajay-infra/aj-platform-gitops
+              revision: main
+              files:
+                - path: "saas/customers/*.yaml"
+
+  template:
+    metadata:
+      name: "saas-ns-{{customer}}-{{name}}"
+      namespace: argocd
+      labels:
+        model:         saas-pooled
+        customer:      "{{customer}}"
+        customerTier:  "{{customerTier}}"
+        cluster:       "{{name}}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform   # platform team owns customer namespace provisioning
+
+      source:
+        repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+        targetRevision: main
+        path:           saas/namespace-template
+        helm:
+          releaseName: "saas-ns-{{customer}}"
+          parameters:
+            - name:  customer
+              value: "{{customer}}"
+            - name:  customerTier
+              value: "{{customerTier}}"
+            - name:  namespace
+              value: "{{namespace}}"
+            - name:  env
+              value: "{{values.env}}"
+
+      destination:
+        server:    "{{server}}"
+        namespace: "{{namespace}}"
+
+      syncPolicy:
+        automated:
+          prune:    true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 2m

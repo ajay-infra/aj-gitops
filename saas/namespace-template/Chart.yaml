@@ -1,0 +1,5 @@
+apiVersion: v2
+name: saas-namespace-template
+description: Provisions a labelled namespace + ResourceQuota for a SaaS customer on a pooled cluster.
+type: application
+version: 0.1.0

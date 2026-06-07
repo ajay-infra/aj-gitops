@@ -1,0 +1,17 @@
+{{- $tier := .Values.customerTier -}}
+{{- $quota := index .Values.quotas $tier -}}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ .Values.customer }}-quota
+  namespace: {{ .Values.namespace }}
+  labels:
+    customer:  {{ .Values.customer }}
+    saas.tier: {{ $tier }}
+spec:
+  hard:
+    requests.cpu:    {{ index $quota "requests.cpu" | quote }}
+    requests.memory: {{ index $quota "requests.memory" | quote }}
+    limits.cpu:      {{ index $quota "limits.cpu" | quote }}
+    limits.memory:   {{ index $quota "limits.memory" | quote }}
+    pods:            {{ index $quota "pods" | quote }}

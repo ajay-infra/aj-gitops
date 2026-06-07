@@ -17,18 +17,14 @@ spec:
   sourceRepos:
     - https://github.com/ajay-infra/k8s-manifests
     - https://github.com/ajay-infra/aj-platform-gitops
+    # Team repos — add each team repo URL here when onboarding via register-namespace.yml
+    - https://github.com/ajay-infra/*
 
   destinations:
-    # dev + staging workload clusters
+    # Internal workload clusters (dev / staging / prod blue+green / internal-tools)
+    # server: "*" — all registered clusters; namespace is the real scope guard
     - namespace: "*"
-      server: "https://ai-search-dev.*"
-    - namespace: "*"
-      server: "https://ai-search-staging.*"
-    # prod workload clusters (blue + green)
-    - namespace: "*"
-      server: "https://ai-search-prod-blue.*"
-    - namespace: "*"
-      server: "https://ai-search-prod-green.*"
+      server: "*"
 
   clusterResourceWhitelist:
     - group: ""

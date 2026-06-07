@@ -1,0 +1,26 @@
+customer: ""
+customerTier: pro       # free | pro | enterprise
+namespace: ""
+env: uat
+team: platform          # platform team owns customer namespace provisioning
+
+# ResourceQuota sizes per tier — overridden by customerTier at template render time
+quotas:
+  free:
+    requests.cpu:    "500m"
+    requests.memory: "512Mi"
+    limits.cpu:      "2"
+    limits.memory:   "2Gi"
+    pods:            "10"
+  pro:
+    requests.cpu:    "2"
+    requests.memory: "2Gi"
+    limits.cpu:      "8"
+    limits.memory:   "8Gi"
+    pods:            "50"
+  enterprise:
+    requests.cpu:    "8"
+    requests.memory: "8Gi"
+    limits.cpu:      "32"
+    limits.memory:   "32Gi"
+    pods:            "200"

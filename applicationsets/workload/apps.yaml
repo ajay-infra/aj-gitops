@@ -1,10 +1,20 @@
-# ApplicationSet — Application workloads across all workload clusters
+# ApplicationSet — team app workloads across all internal workload clusters
 #
-# Matrix generator: clusters × app components
-# Generates one Application per (cluster, component) pair.
-# Manifests live in k8s-manifests repo, organized by component + environment.
+# Matrix generator: clusters (model=internal) × git files (teams/*/*.yaml)
+# One Application generated per (cluster, team-app) pair automatically.
 #
-# Sync policy: auto-sync for dev/staging, manual gate for prod.
+# How to onboard a team:
+#   1. Add teams/<team>/<app>.yaml for each service (see teams/README.md)
+#   2. Merge to main → ArgoCD picks it up within ~30s on dev/staging
+#   3. For AppProject creation: run register-namespace.yml workflow
+#
+# Blue/green behaviour:
+#   Blue AND green clusters both match model=internal — both get the same apps.
+#   No re-registration needed during upgrades.
+#
+# Sync policy is driven by the cluster Secret label auto_sync (set at argocd-register time):
+#   auto_sync=true  → dev + staging (prune + selfHeal on)
+#   auto_sync=false → prod (manual sync gate in ArgoCD UI)
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
@@ -15,70 +25,70 @@ spec:
   generators:
     - matrix:
         generators:
-          # All registered workload clusters
+          # All internal workload clusters (not SaaS-pooled or SaaS-dedicated)
           - clusters:
               selector:
                 matchLabels:
                   tier: workload
+                  model: internal
               values:
-                env: "{{metadata.labels.environment}}"
-                # Determine sync policy from environment label
-                autoSync: "{{metadata.labels.auto_sync}}"  # set true on dev/staging cluster secrets
+                env:      "{{metadata.labels.environment}}"
+                autoSync: "{{metadata.labels.auto_sync}}"
 
-          # App components to deploy on every cluster
-          - list:
-              elements:
-                - component: frontend
-                  namespace: frontend
-                  path: "apps/frontend"
-
-                - component: backend
-                  namespace: backend
-                  path: "apps/backend"
-
-                - component: llm-router
-                  namespace: llm
-                  path: "apps/llm-router"
-
-                - component: searxng
-                  namespace: search
-                  path: "apps/searxng"
-
-                - component: rag-worker
-                  namespace: backend
-                  path: "apps/rag-worker"
+          # One YAML file per (team, app) — git generator reads teams/*/*.yaml
+          # Each file provides: team, namespace, app, repoURL, helmPath
+          - git:
+              repoURL:  https://github.com/ajay-infra/aj-platform-gitops
+              revision: main
+              files:
+                - path: "teams/*/*.yaml"
 
   template:
     metadata:
-      name: "{{values.env}}-{{component}}-{{name}}"
+      # Unique per (env, namespace, app, cluster-name)
+      name: "{{values.env}}-{{namespace}}-{{app}}-{{name}}"
       namespace: argocd
       labels:
         environment: "{{values.env}}"
-        component: "{{component}}"
-        cluster: "{{name}}"
+        team:        "{{team}}"
+        namespace:   "{{namespace}}"
+        app:         "{{app}}"
+        cluster:     "{{name}}"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
     spec:
-      project: workloads
+      project: "{{namespace}}"   # AppProject per namespace — created by register-namespace.yml
 
-      source:
-        repoURL: https://github.com/ajay-infra/k8s-manifests
-        targetRevision: main
-        path: "{{path}}/overlays/{{values.env}}"
+      sources:
+        # Source 1: Helm chart from team repo
+        - repoURL:        "{{repoURL}}"
+          targetRevision: main
+          path:           "{{helmPath}}"
+          helm:
+            releaseName: "{{app}}"
+            valueFiles:
+              # Base deployment overrides from team repo
+              - $values/deployments/{{app}}/values.yaml
+              # Environment-specific overrides (last wins)
+              - $values/environments/{{values.env}}/{{app}}.yaml
+
+        # Source 2: same team repo as values reference
+        - repoURL:        "{{repoURL}}"
+          targetRevision: main
+          ref: values
 
       destination:
-        server: "{{server}}"
+        server:    "{{server}}"
         namespace: "{{namespace}}"
 
       syncPolicy:
-        # dev + staging: auto-sync. prod: manual.
-        # Controlled by cluster Secret label auto_sync=true|false set during argocd-register.
         automated:
-          prune: "{{values.autoSync}}"
+          prune:    "{{values.autoSync}}"
           selfHeal: "{{values.autoSync}}"
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true
-          - PrunePropagationPolicy=foreground
-          - PruneLast=true  # delete old resources only after new ones are healthy
+          - PruneLast=true
         retry:
           limit: 3
           backoff:
