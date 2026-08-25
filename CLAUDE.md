@@ -68,7 +68,8 @@ aj-platform-gitops/
 │       ├── apps.yaml            # Matrix: platform-managed app workloads (clusters × components)
 │       ├── arc-runners.yaml, cloudability.yaml, external-dns.yaml, kong.yaml, kong-gateway.yaml,
 │       │   gateway-api-crds.yaml, k8s-manifests.yaml, keda.yaml — all fully wired, values exist
-│       └── arc-controller.yaml, gatekeeper.yaml, falcon.yaml — ⚠️ BROKEN, see Known Gaps below
+│       └── _disabled/  — arc-controller.yaml, gatekeeper.yaml, falcon.yaml, moved here 2026-08-24;
+│                          inert (no directory.recurse), see Known Gaps below to re-enable
 └── .github/workflows/
     ├── ci.yml                   # helm lint, yamllint, kubeconform, helm template diff
     ├── bootstrap-argocd.yml     # helm install/upgrade ArgoCD on central clusters
@@ -214,26 +215,29 @@ They are NOT hardcoded in values files. Set via ApplicationSet `parameters:` or 
 ## Known Gaps
 
 **Three workload ApplicationSets reference chart values files that don't exist —
-confirmed by directory listing, not just a doc claim:**
+confirmed by directory listing, not just a doc claim. Disabled 2026-08-24, not
+deleted — moved to `applicationsets/workload/_disabled/`, which ArgoCD's
+`bootstrap-workload-platform` Application never syncs (no `directory.recurse`, so
+subdirectories are invisible to it):**
 
 | ApplicationSet | References | Exists? |
 |---|---|---|
-| `applicationsets/workload/arc-controller.yaml` | `$values/charts/arc-controller/values/{{env}}.yaml` | ❌ no `charts/arc-controller/` dir at all |
-| `applicationsets/workload/gatekeeper.yaml` | `$values/charts/gatekeeper/values/{{env}}.yaml` | ❌ no `charts/gatekeeper/` dir at all |
-| `applicationsets/workload/falcon.yaml` | `$values/charts/falcon/values/{{env}}.yaml` | ❌ no `charts/falcon/` dir at all |
+| `_disabled/arc-controller.yaml` | `$values/charts/arc-controller/values/{{env}}.yaml` | ❌ no `charts/arc-controller/` dir at all |
+| `_disabled/gatekeeper.yaml` | `$values/charts/gatekeeper/values/{{env}}.yaml` | ❌ no `charts/gatekeeper/` dir at all |
+| `_disabled/falcon.yaml` | `$values/charts/falcon/values/{{env}}.yaml` | ❌ no `charts/falcon/` dir at all |
 
-All three ApplicationSets use the `tier: workload` cluster generator — same as the
-working ones (`arc-runners`, `cloudability`, `external-dns`, `kong`, `keda`) — so
-they are live, not disabled or dormant. If ArgoCD tries to sync any of these against
-a registered workload cluster, the Helm `valueFiles` source will fail to resolve and
-the Application will go into a permanent sync error, not silently skip.
+Before this fix, all three used the same live `tier: workload` cluster generator as
+the working ApplicationSets (`arc-runners`, `cloudability`, `external-dns`, `kong`,
+`keda`) — the moment a workload cluster registered with ArgoCD, all three would have
+gone into a permanent sync error (missing Helm `valueFiles` source), not silently
+skipped. Not caught earlier only because no workload cluster has been registered with
+ArgoCD yet.
 
-This was not caught before because no workload cluster has been registered with
-ArgoCD yet (per `aj-infra-context`'s roadmap) — nothing has actually tried to sync
-these three ApplicationSets in practice. Before the first real cluster registration,
-either add the missing `charts/<name>/values/<env>.yaml` files (real Helm values,
-not fabricated ones — needs actual Gatekeeper/Falcon/ARC-controller config decisions)
-or remove/disable these three ApplicationSets until that work is done.
+**To re-enable one:** add the real `charts/<name>/values/<env>.yaml` files (real Helm
+values, not fabricated ones — needs actual Gatekeeper/Falcon/ARC-controller config
+decisions this session didn't have context to make, e.g. a real CrowdStrike CID/secret
+for Falcon, a real GitHub App's credentials for ARC), then `git mv` the file back up
+to `applicationsets/workload/`. See `applicationsets/workload/_disabled/README.md`.
 
 **`onboard-saas-customer` (in `aj-agent-farm`, marked "implemented" in the farm's
 skills catalog) has no matching infrastructure here.** The skill's `generate.py`
