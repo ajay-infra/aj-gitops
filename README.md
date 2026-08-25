@@ -18,6 +18,10 @@ charts/             Helm values files per component per environment
   tempo/            Distributed tracing (S3-backed)
   k8s-monitoring/   Alloy collector on workload clusters
   argo-rollouts/    Pod-level canary/blue-green on workload clusters
+  arc-runners/, cloudability/, external-dns/, kong/   Workload-cluster add-ons (values only)
+  kong-gateway/     Gateway API resources (Gateway, GatewayClass) — not Helm values
+  (arc-controller/, gatekeeper/, falcon/ do NOT exist yet — see CLAUDE.md Known Gaps;
+   their ApplicationSets reference these paths but will fail to sync until added)
 applicationsets/
   central/          Installs LGTM stack on central clusters (via ArgoCD)
   workload/         Deploys k8s-monitoring + app workloads to all workload clusters
