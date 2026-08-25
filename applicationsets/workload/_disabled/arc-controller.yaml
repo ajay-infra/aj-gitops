@@ -1,3 +1,16 @@
+# ⚠️ DISABLED — moved out of applicationsets/workload/ on 2026-08-24.
+# Reason: references $values/charts/arc-controller/values/{{env}}.yaml, but that directory
+# was never created — this ApplicationSet would fail to sync (missing Helm
+# valueFiles source). See CLAUDE.md Known Gaps for detail.
+#
+# ArgoCD's bootstrap-workload-platform Application (bootstrap/*.yaml) does NOT
+# recurse into subdirectories of applicationsets/workload/ (no directory.recurse
+# set), so this file is inert here — safe, reversible, no cluster impact.
+#
+# To re-enable: add real charts/arc-controller/values/<env>.yaml files (real config, not
+# fabricated — see CLAUDE.md for what each one needs), then move this file back
+# up to applicationsets/workload/arc-controller.yaml.
+#
 # ApplicationSet — ARC controller on all workload clusters
 #
 # Deploys the Actions Runner Controller operator (arc-systems namespace).

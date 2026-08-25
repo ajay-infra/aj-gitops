@@ -2,6 +2,11 @@
 
 All notable changes to this repo are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased] (2)
+
+### Fixed
+- **Disabled the 3 broken ApplicationSets** documented in the previous entry (`arc-controller`, `gatekeeper`, `falcon`) rather than leaving them live and broken. Moved to a new `applicationsets/workload/_disabled/` subdirectory, which `bootstrap/*.yaml`'s `bootstrap-workload-platform` Application never syncs (confirmed: no `directory.recurse` set on that Application's source, so ArgoCD doesn't descend into subdirectories of `applicationsets/workload/`). Each file got a banner explaining why and how to re-enable; added `_disabled/README.md` with the same. Not deleted — the design work stays, just inert until real Helm values exist for each.
+
 ## [Unreleased]
 
 ### Fixed
