@@ -27,8 +27,11 @@ jobs:
             keda/ \
             kong/ \
             external-secrets/ \
-            falcon/ \
-            cloudability/
+            falcon/
+        # No cloudability/ directory exists yet — see CLAUDE.md Known TODOs
+        # ("Add Cloudability agent manifest (or confirm it is fully handled by the
+        # ApplicationSet Helm install)"). Add it back to this list if that manifest
+        # ever lands here.
 
   validate-k8s:
     name: Validate Kubernetes manifests
@@ -47,10 +50,10 @@ jobs:
             -summary \
             -kubernetes-version 1.35.0 \
             namespaces/ \
-            falcon/ \
-            cloudability/
+            falcon/
         # OPA, Karpenter, KEDA, Kong CRDs are not in the default schema —
-        # -ignore-missing-schemas skips them; yamllint catches syntax errors
+        # -ignore-missing-schemas skips them; yamllint catches syntax errors.
+        # No cloudability/ directory exists yet — see CLAUDE.md Known TODOs.
 
   validate-opa:
     name: Validate OPA Rego

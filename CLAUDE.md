@@ -116,8 +116,18 @@ Mutation policies (image rewrites) apply on ALL environments. Developers write `
 
 ## Known TODOs
 
-- [ ] Add `.sops.yaml` and SOPS-encrypted ExternalSecret values (KMS key ARNs from aj-tf-module-scps outputs)
+- [x] `.sops.yaml` exists — but ["SOPS-encrypted ExternalSecret values" was never a coherent
+      task: ExternalSecrets don't hold secret material client-side, they hold a
+      `remoteRef.key` pointing at a Secrets Manager ARN, so there's nothing in them for
+      SOPS to encrypt. What's actually still open: `.sops.yaml`'s `kms:` entries are all
+      `REPLACE_WITH_*_SOPS_KEY_ID` placeholders (real ARNs come from `aj-tf-module-scps`
+      outputs), and every `external-secrets/*.yaml`'s `remoteRef.key` is still
+      `REPLACE_WITH_*_SECRET_ARN` (real ARNs come from `aj-tf-module-aurora`/`aj-tf-module-valkey`
+      outputs). Also note `.sops.yaml`'s `path_regex` patterns target `envs/dev|staging|prod/*.yaml`,
+      but no `envs/` directory exists in this repo yet either.
+- [ ] Fill in real KMS key ARNs in `.sops.yaml` (from `aj-tf-module-scps`) and real Secrets
+      Manager ARNs in `external-secrets/*.yaml` (from `aj-tf-module-aurora`/`aj-tf-module-valkey`)
 - [ ] Configure ArgoCD Image Updater: watch ECR for new image digests, open PRs automatically
-- [ ] Add Cloudability agent manifest (or confirm it is fully handled by the ApplicationSet Helm install)
+- [ ] Add Cloudability agent manifest (or confirm it is fully handled by the ApplicationSet Helm install) — `ci.yml` referenced a `cloudability/` directory that never existed, breaking `yamllint`/`kubeconform` on every PR; removed the reference until this TODO is actually done
 - [ ] Narrow Falcon OPA exclusion to `falcon-system` namespace only (already designed, needs Constraint update)
 - [ ] Add PodDisruptionBudget manifests for all platform workloads
