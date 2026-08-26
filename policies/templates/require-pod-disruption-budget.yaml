@@ -35,7 +35,19 @@ spec:
         pdb_exists(namespace, selector) {
           pdb := data.inventory.namespace[namespace]["policy/v1"]["PodDisruptionBudget"][_]
           pdb_selector := pdb.spec.selector.matchLabels
-          # PDB selector must be a subset of Deployment selector
-          label_key := pdb_selector[key]
-          selector[key] == label_key
+          # PDB selector must be a subset of Deployment selector — every key/value
+          # pair in pdb_selector must also appear in selector, not just one.
+          # (Bug fixed 2026-08-25: the old version only required ONE matching
+          # key via Rego's implicit existential quantification over `key`, so a
+          # PDB covering an unrelated Deployment that happened to share a single
+          # label — e.g. a shared `app` label with a different `tier` — was
+          # wrongly treated as covering this one too. Confirmed with `gator test`:
+          # two Deployments sharing `app: shared` but differing on `tier`, with a
+          # PDB selector matching only the first, produced zero violations for
+          # the second, unprotected Deployment.)
+          is_subset(pdb_selector, selector)
+        }
+
+        is_subset(subset, superset) {
+          count({key | subset[key] == superset[key]}) == count(subset)
         }
