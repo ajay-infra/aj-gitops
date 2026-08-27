@@ -5,9 +5,20 @@ syncs `applicationsets/workload/` as a plain directory source with no
 `directory.recurse` set — ArgoCD does not descend into subdirectories by default, so
 nothing in `_disabled/` is ever applied to any cluster.
 
-## Why these three are here
+> **`gatekeeper.yaml` was re-enabled on 2026-08-27** and now lives back in
+> `applicationsets/workload/`. It was the one of the three that needed **no
+> secret** — its own header says "No IAM needed — Gatekeeper only talks to the
+> K8s API server". What it needed was a policy *stance*, which is a decision:
+> `charts/gatekeeper/values/*.yaml` now exists for every environment label,
+> with `failurePolicy: Ignore` and the reasoning written down.
+>
+> `arc-controller.yaml` and `falcon.yaml` stay here — they genuinely need a real
+> GitHub App credential and a real CrowdStrike CID respectively, and fabricating
+> either would be worse than leaving them disabled.
 
-`arc-controller.yaml`, `gatekeeper.yaml`, and `falcon.yaml` each reference
+## Why these are here
+
+`arc-controller.yaml` and `falcon.yaml` each reference
 `$values/charts/<name>/values/{{env}}.yaml` — but `charts/arc-controller/`,
 `charts/gatekeeper/`, and `charts/falcon/` don't exist anywhere in this repo. If any
 of these had stayed in `applicationsets/workload/`, the moment a workload cluster

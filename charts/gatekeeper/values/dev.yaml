@@ -1,0 +1,71 @@
+# OPA Gatekeeper — dev
+#
+# Single replica. Policies here are advisory in practice — 4 of 6 constraints are enforcementAction: warn, and only deny-latest-tag and no-privileged-containers deny.
+#
+# failurePolicy: Ignore
+# ─────────────────────
+# If Gatekeeper is unavailable, admission requests are ALLOWED through rather
+# than blocked. This is deliberate and it is the safe default: with `Fail`, a
+# Gatekeeper outage stops every pod in the cluster from scheduling, turning a
+# policy-engine problem into a total outage.
+#
+# The cost is real and must be understood: while Gatekeeper is down, the
+# policies are NOT enforced and nothing announces it. Flip to `Fail` only once
+# the controller has proven stable here and you would rather fail closed —
+# prod first, and only after the audit metrics are being watched.
+replicas: 1
+
+validatingWebhookFailurePolicy: Ignore
+mutatingWebhookFailurePolicy: Ignore
+
+# Namespaces excluded from admission review. Identical to the canonical list in
+# aj-skill-farm's infra-reviewer (SYSTEM_NAMESPACES) — kept in sync deliberately
+# so a namespace exempted in one place is exempted in both.
+validatingWebhookExemptNamespacesLabels: []
+validatingWebhookIgnoredNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - gatekeeper-system
+      - argocd
+      - falcon-system
+      - karpenter
+      - external-secrets
+      - cert-manager
+      - monitoring
+      - cloudability
+      - arc-runners
+      - arc-systems
+      - kong
+      - gateway-system
+
+# Audit re-evaluates existing objects on a timer, catching things admitted
+# before a policy existed. Cheaper in non-prod.
+auditInterval: 300
+constraintViolationsLimit: 100
+auditFromCache: false
+
+# Surface violations as Kubernetes events so they show up in kubectl and the
+# observability stack, not only in Gatekeeper's own status fields.
+emitAdmissionEvents: true
+emitAuditEvents: true
+logDenies: true
+
+controllerManager:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+audit:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
