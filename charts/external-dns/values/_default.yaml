@@ -6,9 +6,19 @@
 # a permanent sync error — the failure that put three ApplicationSets in
 # _disabled/ and left keda pointing at a values directory that did not exist.
 #
-# Derived from dev — the most conservative existing profile. A cluster nobody
-# wrote a profile for should get the smallest safe configuration, not a
-# production one.
+# CORRECTION 2026-08-27: this file was originally derived from dev.yaml on the
+# assumption that dev is the most conservative profile. For external-dns that is
+# BACKWARDS — dev runs `policy: sync`, which lets external-dns DELETE Route53
+# records, while prod runs `upsert-only`, which never deletes.
+#
+# A cluster with no profile (prod-regulated, team-a-prod, internal-tools today)
+# would therefore have inherited deletion rights on a shared hosted zone. The
+# default is now upsert-only: the safe direction to be wrong in is "a stale
+# record lingers", not "a record for a live service disappears".
+#
+# `sync` remains correct for dev and staging, where reclaiming records from
+# deleted Ingresses matters more than the blast radius of a mistake. Those
+# profiles set it explicitly.
 provider:
   name: aws
 
@@ -21,13 +31,22 @@ domainFilters:
   - internal.ai-search.io
 
 registry: txt
-txtOwnerId: ai-search-dev
+# Overridden at runtime by the ApplicationSet, which passes the cluster name as
+# a Helm parameter (parameters beat valueFiles). The value here is only a
+# fallback and must never be shared between clusters.
+txtOwnerId: REPLACE_PER_CLUSTER
 
 managedRecordTypes:
   - A
   - TXT
 
-policy: sync
+# upsert-only: external-dns creates and updates records, and NEVER deletes.
+#
+# This also protects the records Terraform owns in the SAME hosted zone —
+# blue.<domain>, green.<domain>, the active.<domain> cutover CNAME and the
+# apex A/alias all come from aj-tf-module-cloudfront, not from any Ingress.
+# external-dns must never be in a position to remove them.
+policy: upsert-only
 
 sources:
   - ingress

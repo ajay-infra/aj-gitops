@@ -130,6 +130,41 @@ To upgrade: bump `ROLLOUTS_CHART_VERSION` in the workflow, run with `action: upg
 
 ---
 
+## Route53 ownership — four writers, one zone
+
+Four different things write to the hosted zone. Knowing which owns what is the
+difference between a safe cutover and a deleted production record.
+
+| Writer | Owns | Lifetime |
+|---|---|---|
+| **Terraform** (`aj-tf-module-cloudfront`) | `blue.<domain>`, `green.<domain>`, the **`active.<domain>` cutover CNAME**, the apex A/alias, and ACM DNS-validation CNAMEs | Permanent |
+| **cert-manager** | `_acme-challenge.*` **TXT**, for DNS-01 validation only | Seconds — created then deleted |
+| **external-dns** | Records for Ingress / `type: LoadBalancer` Services, plus its own TXT registry entries | Follows the workload |
+| **ACK ACM controller** *(not yet deployed)* | ACM DNS-validation CNAMEs for certs it creates | Permanent |
+
+**cert-manager does NOT manage blue/green traffic records.** It only ever
+creates the ephemeral ACME challenge TXT. Everything about which colour serves
+traffic is Terraform's, and the cutover is one `active_color` value in
+`edge.tfvars`.
+
+### Why external-dns cannot clobber the others
+
+Two properties, both load-bearing:
+
+- **`txtOwnerId` is unique per cluster** — passed by the ApplicationSet as
+  `{{name}}`, so blue and green never claim each other's records.
+- **`policy: upsert-only` in prod and in the default** — external-dns creates
+  and updates but never deletes. `sync` is set explicitly in dev and staging,
+  where reclaiming records from deleted Ingresses matters more than the blast
+  radius of a mistake.
+
+The default was briefly `sync` (2026-08-27) because `_default.yaml` was derived
+from `dev.yaml` on the assumption that dev is the most conservative profile. For
+external-dns that is backwards: dev deletes, prod does not. Any cluster without
+a profile — `prod-regulated`, `team-a-prod`, `internal-tools` — would have
+inherited deletion rights over a shared zone containing Terraform's cutover
+records. Corrected the same day.
+
 ## Values resolution — layered, with a default
 
 Every workload ApplicationSet loads two value files:
