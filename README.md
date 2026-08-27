@@ -34,6 +34,19 @@ projects/           ArgoCD AppProject RBAC manifests
 
 ---
 
+## Verifying this locally, for $0
+
+Nothing here has ever been applied to a cluster. CI lints the YAML and validates
+the ApplicationSets structurally, which proves they are well-formed — not that
+ArgoCD generates the Applications you expect from them.
+
+Step 3 of
+[`aj-infra-context/local-testing/local-verification.md`](https://github.com/ajay-infra/aj-infra-context/blob/main/local-testing/local-verification.md)
+stands up `kind` + ArgoCD and applies these ApplicationSets, so you can see the
+generated Applications. Expect partial failure, informatively: they reference
+private repos at `targetRevision: main` and several target clusters that do not
+exist. **Generation is what you are testing there, not sync.**
+
 ## How components are deployed
 
 | Component | How | Managed by |
