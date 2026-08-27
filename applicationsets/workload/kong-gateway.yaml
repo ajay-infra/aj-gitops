@@ -38,7 +38,7 @@ spec:
 
       source:
         repoURL:        https://github.com/ajay-infra/aj-platform-gitops
-        targetRevision: main
+        targetRevision: v1.0.0
         path:           charts/kong-gateway
 
       destination:

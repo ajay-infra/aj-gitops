@@ -61,7 +61,7 @@ spec:
 
       source:
         repoURL: https://github.com/ajay-infra/k8s-manifests
-        targetRevision: main
+        targetRevision: v1.0.0
         path: "{{path}}/overlays/{{values.env}}"
 
       destination:
