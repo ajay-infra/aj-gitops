@@ -1,17 +1,16 @@
-# ⚠️ DISABLED — moved out of applicationsets/workload/ on 2026-08-24.
-# Reason: references $values/charts/gatekeeper/values/{{env}}.yaml, but that directory
-# was never created — this ApplicationSet would fail to sync (missing Helm
-# valueFiles source). See CLAUDE.md Known Gaps for detail.
-#
-# ArgoCD's bootstrap-workload-platform Application (bootstrap/*.yaml) does NOT
-# recurse into subdirectories of applicationsets/workload/ (no directory.recurse
-# set), so this file is inert here — safe, reversible, no cluster impact.
-#
-# To re-enable: add real charts/gatekeeper/values/<env>.yaml files (real config, not
-# fabricated — see CLAUDE.md for what each one needs), then move this file back
-# up to applicationsets/workload/gatekeeper.yaml.
-#
 # ApplicationSet — OPA Gatekeeper on all workload clusters
+#
+# Re-enabled 2026-08-27. It was in _disabled/ because
+# charts/gatekeeper/values/<env>.yaml did not exist, which would have put this
+# Application into a permanent sync error. Those files now exist for EVERY real
+# environment label — dev, staging, prod, prod-regulated, internal-tools,
+# team-a-prod — not just dev/staging/prod, because {{values.env}} is the
+# cluster's environment label and provision-eks lets an operator name a cluster
+# anything.
+#
+# Unlike arc-controller and falcon, this needed no secret to enable: it needed a
+# policy stance. See the values files for the failurePolicy reasoning.
+#
 #
 # Deploys the Gatekeeper admission controller. ConstraintTemplates + Constraints
 # (the actual policies) live in k8s-manifests and are synced separately.

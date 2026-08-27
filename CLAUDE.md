@@ -130,6 +130,38 @@ To upgrade: bump `ROLLOUTS_CHART_VERSION` in the workflow, run with `action: upg
 
 ---
 
+## Known gap — values files are keyed on the environment LABEL
+
+Every chart here provides `charts/<name>/values/{dev,staging,prod}.yaml`, and
+ApplicationSets select them with `$values/charts/<name>/values/{{values.env}}.yaml`
+where `{{values.env}}` is the cluster Secret's `environment` label.
+
+That label is the **environment directory name**, not a tier. Real labels today
+are `dev`, `staging`, `prod`, `prod-regulated`, `internal-tools` and
+`team-a-prod`. So a cluster whose label is not literally dev/staging/prod hits a
+missing `valueFiles` source and the Application goes into a **permanent sync
+error** — the exact failure that put three ApplicationSets in `_disabled/`.
+
+Currently missing:
+
+| Chart | Missing values for |
+|---|---|
+| `kong` | prod-regulated, internal-tools, team-a-prod |
+| `cloudability` | prod-regulated, internal-tools, team-a-prod |
+| `k8s-monitoring` | prod-regulated, internal-tools, team-a-prod |
+| `arc-runners` | prod-regulated, internal-tools, team-a-prod |
+| `external-dns` | prod, prod-regulated, internal-tools, team-a-prod |
+| `gatekeeper` | — complete as of 2026-08-27 |
+
+This is the same root cause as the `bootstrap-workload.yml` auto-sync bug fixed
+in `aj-infra-release#10`: **things keyed on the environment label break for any
+cluster not named dev/staging/prod**, and `provision-eks` lets an operator name
+a cluster anything.
+
+Two ways out, neither done yet: add a values file per real label (what
+`gatekeeper` did), or give the cluster Secret a coarser label to key on. The
+second is better and larger.
+
 ## Helm Chart Versions (pinned)
 
 | Chart | Version | Repo |
