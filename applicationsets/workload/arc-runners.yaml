@@ -51,7 +51,14 @@ spec:
           targetRevision: "0.9.3"
           helm:
             releaseName: "arc-runners-{{values.env}}"
+            # _default.yaml always loads; the per-environment file overrides it
+            # when one exists. ignoreMissingValueFiles means a cluster whose
+            # environment label has no profile falls back to the default instead
+            # of a permanent sync error — {{values.env}} is the env directory
+            # name, and provision-eks lets an operator name a cluster anything.
+            ignoreMissingValueFiles: true
             valueFiles:
+              - $values/charts/arc-runners/values/_default.yaml
               - $values/charts/arc-runners/values/{{values.env}}.yaml
 
         - repoURL:        https://github.com/ajay-infra/aj-platform-gitops

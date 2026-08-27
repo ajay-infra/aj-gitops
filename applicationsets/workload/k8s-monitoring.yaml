@@ -42,7 +42,13 @@ spec:
           targetRevision: "2.0.2"
           helm:
             releaseName: k8s-monitoring
+            # Same layering as the other workload ApplicationSets. This one
+            # composes the path in the generator rather than inline, but the
+            # defect was identical: an environment label with no profile meant
+            # a missing valueFiles source and a permanent sync error.
+            ignoreMissingValueFiles: true
             valueFiles:
+              - $values/charts/k8s-monitoring/values/_default.yaml
               - $values/{{values.valuesFile}}
             parameters:
               - name: cluster.name

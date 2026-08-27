@@ -130,37 +130,34 @@ To upgrade: bump `ROLLOUTS_CHART_VERSION` in the workflow, run with `action: upg
 
 ---
 
-## Known gap — values files are keyed on the environment LABEL
+## Values resolution — layered, with a default
 
-Every chart here provides `charts/<name>/values/{dev,staging,prod}.yaml`, and
-ApplicationSets select them with `$values/charts/<name>/values/{{values.env}}.yaml`
-where `{{values.env}}` is the cluster Secret's `environment` label.
+Every workload ApplicationSet loads two value files:
 
-That label is the **environment directory name**, not a tier. Real labels today
-are `dev`, `staging`, `prod`, `prod-regulated`, `internal-tools` and
-`team-a-prod`. So a cluster whose label is not literally dev/staging/prod hits a
-missing `valueFiles` source and the Application goes into a **permanent sync
-error** — the exact failure that put three ApplicationSets in `_disabled/`.
+```yaml
+ignoreMissingValueFiles: true
+valueFiles:
+  - $values/charts/<name>/values/_default.yaml     # always
+  - $values/charts/<name>/values/{{values.env}}.yaml  # overrides, if it exists
+```
 
-Currently missing:
+`{{values.env}}` is the cluster Secret's `environment` label — the environment
+*directory name*, not a tier. Real labels today are `dev`, `staging`, `prod`,
+`prod-regulated`, `internal-tools` and `team-a-prod`, and `provision-eks` lets
+an operator name a cluster anything.
 
-| Chart | Missing values for |
-|---|---|
-| `kong` | prod-regulated, internal-tools, team-a-prod |
-| `cloudability` | prod-regulated, internal-tools, team-a-prod |
-| `k8s-monitoring` | prod-regulated, internal-tools, team-a-prod |
-| `arc-runners` | prod-regulated, internal-tools, team-a-prod |
-| `external-dns` | prod, prod-regulated, internal-tools, team-a-prod |
-| `gatekeeper` | — complete as of 2026-08-27 |
+Before 2026-08-27 a label with no matching file meant a **missing `valueFiles`
+source and a permanent sync error** — the failure that put three ApplicationSets
+in `_disabled/`, and which `keda` was suffering silently in the *active*
+directory while pointing at a `charts/keda/values/` that did not exist at all.
 
-This is the same root cause as the `bootstrap-workload.yml` auto-sync bug fixed
-in `aj-infra-release#10`: **things keyed on the environment label break for any
-cluster not named dev/staging/prod**, and `provision-eks` lets an operator name
-a cluster anything.
+`_default.yaml` is derived from each chart's most conservative existing profile.
+A cluster nobody wrote a profile for gets the smallest safe configuration rather
+than a production one, and never a sync error.
 
-Two ways out, neither done yet: add a values file per real label (what
-`gatekeeper` did), or give the cluster Secret a coarser label to key on. The
-second is better and larger.
+**Adding a per-environment profile is optional.** Add one when a cluster needs
+to differ; otherwise the default applies. Do **not** add a file per cluster out
+of habit — that is what created the gap.
 
 ## Helm Chart Versions (pinned)
 

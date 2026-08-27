@@ -1,0 +1,62 @@
+# k8s-monitoring — default values, applied to every cluster.
+#
+# Layered: this file always loads, then the per-environment file overrides it if
+# one exists (ignoreMissingValueFiles: true). A cluster whose environment label
+# has no profile gets these defaults instead of a permanent sync error.
+#
+# Derived from dev — the most conservative existing profile.
+cluster:
+  name: ai-search-dev
+
+destinations:
+  - name: central-mimir
+    type: prometheus
+    url: http://mimir-nginx.monitoring.central-nonprod.svc.cluster.local/api/v1/push
+
+  - name: central-loki
+    type: loki
+    url: http://loki-gateway.monitoring.central-nonprod.svc.cluster.local/loki/api/v1/push
+
+  - name: central-tempo
+    type: otlp
+    url: http://tempo.monitoring.central-nonprod.svc.cluster.local:4317
+    protocol: grpc
+    tls:
+      insecure: true
+
+clusterMetrics:
+  enabled: true
+  destinations: [central-mimir]
+
+podLogs:
+  enabled: true
+  destinations: [central-loki]
+
+traces:
+  enabled: true
+  destinations: [central-tempo]
+
+kube-state-metrics:
+  enabled: true
+
+node-exporter:
+  enabled: true
+
+alloy-metrics:
+  enabled: true
+
+alloy-logs:
+  enabled: true
+
+alloy-receiver:
+  enabled: false
+
+alloy:
+  alloy:
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi

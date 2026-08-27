@@ -1,0 +1,37 @@
+# KEDA — default values, applied to every cluster.
+#
+# Layered: this file always loads, then values/<environment>.yaml overrides it
+# if one exists (ApplicationSet sets ignoreMissingValueFiles: true). A cluster
+# whose environment label has no file gets these defaults instead of a
+# permanent sync error.
+#
+# Conservative on purpose — a cluster nobody wrote a profile for should get the
+# smallest safe configuration, not a production one.
+operator:
+  replicaCount: 1
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits:   {memory: 512Mi}
+
+metricsServer:
+  replicaCount: 1
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits:   {memory: 512Mi}
+
+webhooks:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests: {cpu: 50m, memory: 64Mi}
+    limits:   {memory: 256Mi}
+
+prometheus:
+  metricServer:
+    enabled: true
+  operator:
+    enabled: true
+
+podDisruptionBudget:
+  operator:
+    minAvailable: 1
