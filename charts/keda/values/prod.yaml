@@ -1,0 +1,31 @@
+# KEDA — prod
+#
+# Two replicas of the operator and metrics server: a KEDA outage stops
+# autoscaling reacting, and in prod that is a capacity incident rather than an
+# inconvenience.
+operator:
+  replicaCount: 2
+  resources:
+    requests: {cpu: 200m, memory: 256Mi}
+    limits:   {memory: 1Gi}
+
+metricsServer:
+  replicaCount: 2
+  resources:
+    requests: {cpu: 200m, memory: 256Mi}
+    limits:   {memory: 1Gi}
+
+webhooks:
+  enabled: true
+  replicaCount: 2
+  resources:
+    requests: {cpu: 100m, memory: 128Mi}
+    limits:   {memory: 512Mi}
+
+prometheus:
+  metricServer: {enabled: true}
+  operator:     {enabled: true}
+
+podDisruptionBudget:
+  operator:      {minAvailable: 1}
+  metricsServer: {minAvailable: 1}

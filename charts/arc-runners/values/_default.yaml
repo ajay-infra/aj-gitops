@@ -1,0 +1,78 @@
+# arc-runners — default values, applied to every cluster.
+#
+# Layered: this file always loads, then values/<environment>.yaml overrides it
+# if one exists (the ApplicationSet sets ignoreMissingValueFiles: true). A
+# cluster whose environment label has no profile gets these defaults instead of
+# a permanent sync error — the failure that put three ApplicationSets in
+# _disabled/ and left keda pointing at a values directory that did not exist.
+#
+# Derived from dev — the most conservative existing profile. A cluster nobody
+# wrote a profile for should get the smallest safe configuration, not a
+# production one.
+githubConfigUrl: "https://github.com/ajay-infra"
+
+githubConfigSecret: "arc-github-app-secret"
+
+runnerScaleSetName: "dev"
+
+minRunners: 0  # scale to zero when idle — cost saving for dev
+maxRunners: 5
+
+template:
+  spec:
+    serviceAccountName: arc-runner-dev  # bound to Pod Identity role via aj-infra-platform
+    initContainers:
+      - name: init-dind-externals
+        image: ghcr.io/actions/actions-runner:2.323.0
+        command: ["cp", "-r", "-v", "/home/runner/externals/.", "/home/runner/tmpDir/"]
+        volumeMounts:
+          - name: dind-externals
+            mountPath: /home/runner/tmpDir
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:2.323.0
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: "2"
+            memory: 2Gi
+        env:
+          - name: DOCKER_HOST
+            value: tcp://localhost:2376
+          - name: DOCKER_TLS_VERIFY
+            value: "1"
+          - name: DOCKER_CERT_PATH
+            value: /certs/client
+        volumeMounts:
+          - name: work
+            mountPath: /home/runner/_work
+          - name: dind-cert
+            mountPath: /certs/client
+            readOnly: true
+      - name: dind
+        image: docker:dind
+        args:
+          - dockerd
+          - --host=tcp://0.0.0.0:2376
+          - --tlsverify
+          - --tlscacert=/certs/ca.pem
+          - --tlscert=/certs/server-cert.pem
+          - --tlskey=/certs/server-key.pem
+        securityContext:
+          privileged: true
+        volumeMounts:
+          - name: work
+            mountPath: /home/runner/_work
+          - name: dind-cert
+            mountPath: /certs
+          - name: dind-externals
+            mountPath: /home/runner/externals
+    volumes:
+      - name: work
+        emptyDir: {}
+      - name: dind-cert
+        emptyDir: {}
+      - name: dind-externals
+        emptyDir: {}

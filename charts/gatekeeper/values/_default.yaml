@@ -1,0 +1,60 @@
+# gatekeeper — default values, applied to every cluster.
+#
+# Layered: this file always loads, then values/<environment>.yaml overrides it
+# if one exists (the ApplicationSet sets ignoreMissingValueFiles: true). A
+# cluster whose environment label has no profile gets these defaults instead of
+# a permanent sync error — the failure that put three ApplicationSets in
+# _disabled/ and left keda pointing at a values directory that did not exist.
+#
+# Derived from dev — the most conservative existing profile. A cluster nobody
+# wrote a profile for should get the smallest safe configuration, not a
+# production one.
+replicas: 1
+
+validatingWebhookFailurePolicy: Ignore
+mutatingWebhookFailurePolicy: Ignore
+
+validatingWebhookExemptNamespacesLabels: []
+validatingWebhookIgnoredNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - gatekeeper-system
+      - argocd
+      - falcon-system
+      - karpenter
+      - external-secrets
+      - cert-manager
+      - monitoring
+      - cloudability
+      - arc-runners
+      - arc-systems
+      - kong
+      - gateway-system
+
+auditInterval: 300
+constraintViolationsLimit: 100
+auditFromCache: false
+
+emitAdmissionEvents: true
+emitAuditEvents: true
+logDenies: true
+
+controllerManager:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 512Mi
+audit:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

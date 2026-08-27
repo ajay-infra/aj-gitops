@@ -44,7 +44,14 @@ spec:
           targetRevision: "0.4.4"
           helm:
             releaseName: kong
+            # _default.yaml always loads; the per-environment file overrides it
+            # when one exists. ignoreMissingValueFiles means a cluster whose
+            # environment label has no profile falls back to the default instead
+            # of a permanent sync error — {{values.env}} is the env directory
+            # name, and provision-eks lets an operator name a cluster anything.
+            ignoreMissingValueFiles: true
             valueFiles:
+              - $values/charts/kong/values/_default.yaml
               - $values/charts/kong/values/{{values.env}}.yaml
             parameters:
               # Route all container pulls through ECR dockerhub pull-through cache.

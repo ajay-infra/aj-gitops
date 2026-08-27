@@ -1,0 +1,55 @@
+# external-dns — default values, applied to every cluster.
+#
+# Layered: this file always loads, then values/<environment>.yaml overrides it
+# if one exists (the ApplicationSet sets ignoreMissingValueFiles: true). A
+# cluster whose environment label has no profile gets these defaults instead of
+# a permanent sync error — the failure that put three ApplicationSets in
+# _disabled/ and left keda pointing at a values directory that did not exist.
+#
+# Derived from dev — the most conservative existing profile. A cluster nobody
+# wrote a profile for should get the smallest safe configuration, not a
+# production one.
+provider:
+  name: aws
+
+aws:
+  region: us-east-1
+  # Pod Identity supplies credentials — no IRSA annotation needed
+  zoneType: private  # internal.ai-search.io is a private hosted zone
+
+domainFilters:
+  - internal.ai-search.io
+
+registry: txt
+txtOwnerId: ai-search-dev
+
+managedRecordTypes:
+  - A
+  - TXT
+
+policy: sync
+
+sources:
+  - ingress
+  - service
+
+annotationFilter: "external-dns.alpha.kubernetes.io/hostname"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+serviceAccount:
+  create: true
+  name: external-dns
+  # No IRSA annotation — Pod Identity association is created in aj-tf-module-eks
+  annotations: {}
+
+logLevel: info
+logFormat: json
+
+interval: 1m

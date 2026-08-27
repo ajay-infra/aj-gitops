@@ -1,0 +1,27 @@
+# cloudability — default values, applied to every cluster.
+#
+# Layered: this file always loads, then values/<environment>.yaml overrides it
+# if one exists (the ApplicationSet sets ignoreMissingValueFiles: true). A
+# cluster whose environment label has no profile gets these defaults instead of
+# a permanent sync error — the failure that put three ApplicationSets in
+# _disabled/ and left keda pointing at a values directory that did not exist.
+#
+# Derived from dev — the most conservative existing profile. A cluster nobody
+# wrote a profile for should get the smallest safe configuration, not a
+# production one.
+agent:
+  # Pull API key from the ExternalSecret synced by aj-infra-platform ESO release
+  apiKeySecretRef:
+    name: cloudability-api-key
+    key:  api-key
+
+  # Poll every 5 min — default; reduce for cost if needed
+  pollInterval: 300
+
+  resources:
+    requests:
+      cpu:    50m
+      memory: 64Mi
+    limits:
+      cpu:    200m
+      memory: 128Mi
