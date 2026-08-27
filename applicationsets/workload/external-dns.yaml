@@ -59,7 +59,7 @@ spec:
                 value: "{{values.ecr_registry}}/k8s/external-dns/external-dns"
 
         - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
-          targetRevision: main
+          targetRevision: v1.0.0
           ref: values
 
       destination:

@@ -58,7 +58,7 @@ spec:
               - $values/charts/falcon/values/{{values.env}}.yaml
 
         - repoURL:        https://github.com/ajay-infra/aj-platform-gitops
-          targetRevision: main
+          targetRevision: v1.0.0
           ref: values
 
       destination:
