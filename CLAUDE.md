@@ -239,7 +239,7 @@ decisions this session didn't have context to make, e.g. a real CrowdStrike CID/
 for Falcon, a real GitHub App's credentials for ARC), then `git mv` the file back up
 to `applicationsets/workload/`. See `applicationsets/workload/_disabled/README.md`.
 
-**`onboard-saas-customer` (in `aj-agent-farm`, marked "implemented" in the farm's
+**`onboard-saas-customer` (in `aj-skill-farm`, marked "implemented" in the farm's
 skills catalog) has no matching infrastructure here.** The skill's `generate.py`
 writes to `saas/customers/<customer>.yaml` and its `skill.md` says "The
 `saas-customer-namespaces` ApplicationSet watches `saas/customers/*.yaml`" — grepped
