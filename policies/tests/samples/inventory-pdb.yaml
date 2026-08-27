@@ -1,0 +1,8 @@
+# Cluster state the referential policy reads via data.inventory.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: web-pdb, namespace: frontend}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels: {app: shared, tier: web}

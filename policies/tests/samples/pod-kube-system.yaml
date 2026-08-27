@@ -1,0 +1,12 @@
+# Same violations as pod-privileged, but in an excluded namespace. Proves the
+# exclusion list is doing something rather than the rule silently not firing.
+apiVersion: v1
+kind: Pod
+metadata: {name: system-priv, namespace: kube-system}
+spec:
+  hostNetwork: true
+  containers:
+    - name: app
+      image: docker.io/library/nginx:latest
+      securityContext:
+        privileged: true

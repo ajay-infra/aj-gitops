@@ -1,0 +1,123 @@
+# gator test suite for every OPA Gatekeeper policy in this repo.
+#
+#   gator verify policies/tests/suite.yaml
+#
+# Why this exists
+# ───────────────
+# The six ConstraintTemplates here had no committed tests. A Rego rule that
+# silently matches nothing looks exactly like a rule that finds no violations —
+# and that already happened once: RequirePodDisruptionBudget's subset check used
+# an implicit-existential single-key comparison, so a Deployment with no PDB
+# passed. Fixed 2026-08-26, but nothing stopped it recurring.
+#
+# Each policy is tested in both directions: a compliant object must produce NO
+# violations, and a specific breach must produce one. A suite that only tests
+# the deny path cannot tell a working rule from one that denies everything.
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+metadata:
+  name: platform-policies
+tests:
+  # ── deny :latest ──────────────────────────────────────────────────────────
+  - name: deny-latest-tag
+    template: ../templates/deny-latest-tag.yaml
+    constraint: ../constraints/deny-latest-tag.yaml
+    cases:
+      - name: pinned-semver-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: explicit-latest-is-denied
+        object: samples/pod-latest-tag.yaml
+        assertions: [{violations: yes, message: "latest"}]
+      - name: untagged-image-is-denied
+        # No tag defaults to :latest — a rule checking only endswith(":latest")
+        # would miss this.
+        object: samples/pod-untagged.yaml
+        assertions: [{violations: yes}]
+      - name: latest-in-an-initcontainer-is-denied
+        object: samples/pod-latest-initcontainer.yaml
+        assertions: [{violations: yes, message: "initContainer"}]
+
+  # ── allowed registries ────────────────────────────────────────────────────
+  - name: allowed-registries
+    template: ../templates/allowed-registries.yaml
+    constraint: ../constraints/allowed-registries.yaml
+    cases:
+      - name: ecr-prefix-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: docker-hub-is-denied
+        object: samples/pod-foreign-registry.yaml
+        assertions: [{violations: yes, message: "disallowed registry"}]
+      - name: excluded-namespace-is-not-evaluated
+        object: samples/pod-kube-system.yaml
+        assertions: [{violations: no}]
+
+  # ── privileged / host namespaces ──────────────────────────────────────────
+  - name: no-privileged-containers
+    template: ../templates/no-privileged-containers.yaml
+    constraint: ../constraints/no-privileged-containers.yaml
+    cases:
+      - name: unprivileged-pod-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: privileged-container-is-denied
+        object: samples/pod-privileged.yaml
+        assertions: [{violations: yes}]
+      - name: host-network-is-denied
+        # Pod-level escape, not a container securityContext — a rule that only
+        # walks containers[_] would pass this.
+        object: samples/pod-host-namespace.yaml
+        assertions: [{violations: yes}]
+      - name: falcon-and-system-namespaces-are-excluded
+        object: samples/pod-kube-system.yaml
+        assertions: [{violations: no}]
+
+  # ── probes ────────────────────────────────────────────────────────────────
+  - name: require-probes
+    template: ../templates/require-probes.yaml
+    constraint: ../constraints/require-probes.yaml
+    cases:
+      - name: both-probes-present-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: missing-liveness-probe-is-denied
+        # readinessProbe IS set — proves the two branches are independent.
+        object: samples/pod-no-probes.yaml
+        assertions: [{violations: yes, message: "livenessProbe"}]
+
+  # ── resource limits ───────────────────────────────────────────────────────
+  - name: require-resource-limits
+    template: ../templates/require-resource-limits.yaml
+    constraint: ../constraints/require-resource-limits.yaml
+    cases:
+      - name: requests-and-limits-present-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: requests-without-limits-is-denied
+        object: samples/pod-no-limits.yaml
+        assertions: [{violations: yes}]
+
+  # ── PDB coverage (referential — reads cluster state via data.inventory) ────
+  - name: require-pod-disruption-budget
+    template: ../templates/require-pod-disruption-budget.yaml
+    constraint: ../constraints/require-pod-disruption-budget.yaml
+    cases:
+      - name: deployment-with-a-matching-pdb-is-allowed
+        object: samples/deploy-with-pdb.yaml
+        inventory: [samples/inventory-pdb.yaml]
+        assertions: [{violations: no}]
+
+      - name: deployment-with-no-pdb-at-all-is-denied
+        object: samples/deploy-without-pdb.yaml
+        inventory: [samples/inventory-pdb.yaml]
+        assertions: [{violations: yes, message: "PodDisruptionBudget"}]
+
+      - name: partial-label-overlap-does-not-count-as-covered
+        # The 2026-08-25 regression: shares `app: shared` with the PDB but
+        # differs on `tier`. The old implicit-existential subset check treated
+        # one matching key as full coverage, so this unprotected Deployment
+        # passed silently.
+        object: samples/deploy-partial-label-overlap.yaml
+        inventory: [samples/inventory-pdb.yaml]
+        assertions: [{violations: yes, message: "PodDisruptionBudget"}]

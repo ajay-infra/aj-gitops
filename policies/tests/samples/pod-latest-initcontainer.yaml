@@ -1,0 +1,12 @@
+# The violation is in an initContainer, not a container — a rule with only the
+# containers[_] branch would pass this.
+apiVersion: v1
+kind: Pod
+metadata: {name: bad-init, namespace: frontend}
+spec:
+  initContainers:
+    - name: setup
+      image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/setup:latest
+  containers:
+    - name: app
+      image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/frontend:v1

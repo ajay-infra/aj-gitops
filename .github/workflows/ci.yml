@@ -84,3 +84,24 @@ jobs:
               opa check /tmp/policy.rego && echo "  ✓ Rego valid"
             fi
           done
+
+  policy-tests:
+    name: OPA policy behaviour tests (gator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gator
+        run: |
+          curl -sL https://github.com/open-policy-agent/gatekeeper/releases/download/v3.17.1/gator-v3.17.1-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin gator
+          gator version
+      - name: Verify policy suites
+        # `validate-opa` above only proves the Rego PARSES. This proves it does
+        # what it claims: each policy is tested in both directions, so a rule
+        # that silently matches nothing fails here instead of looking clean.
+        #
+        # Includes a named regression case for the 2026-08-25 bug where
+        # RequirePodDisruptionBudget's implicit-existential subset check treated
+        # one shared label as full PDB coverage, letting an unprotected
+        # Deployment through.
+        run: gator verify policies/tests/suite.yaml

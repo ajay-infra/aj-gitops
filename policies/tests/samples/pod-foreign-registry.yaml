@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: bad-registry, namespace: frontend}
+spec:
+  containers:
+    - name: app
+      image: docker.io/library/nginx:1.27
