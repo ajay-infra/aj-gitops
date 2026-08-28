@@ -84,6 +84,7 @@ namespaces/
 policies/
   constraints/                # Constraint objects (enforcement rules per namespace)
     allowed-registries.yaml
+    deny-acm-exportable.yaml  # cluster-wide, not namespace-scoped — see below
     deny-latest-tag.yaml
     no-privileged-containers.yaml
     require-pod-disruption-budget.yaml
@@ -97,6 +98,7 @@ policies/
     rewrite-quay-io.yaml
   templates/                  # ConstraintTemplate CRDs (Rego policy schema)
     allowed-registries.yaml
+    deny-acm-exportable.yaml
     deny-latest-tag.yaml
     no-privileged-containers.yaml
     require-pod-disruption-budget.yaml
@@ -131,3 +133,29 @@ Mutation policies (image rewrites) apply on ALL environments. Developers write `
 - [ ] Add Cloudability agent manifest (or confirm it is fully handled by the ApplicationSet Helm install) — `ci.yml` referenced a `cloudability/` directory that never existed, breaking `yamllint`/`kubeconform` on every PR; removed the reference until this TODO is actually done
 - [ ] Narrow Falcon OPA exclusion to `falcon-system` namespace only (already designed, needs Constraint update)
 - [ ] Add PodDisruptionBudget manifests for all platform workloads
+
+---
+
+## `deny-acm-exportable` — the one constraint that exists to prevent a bill
+
+Every other constraint here protects the cluster. This one protects the invoice,
+and it is the only policy in the repo that is **cluster-wide and unconditional**
+rather than scoped to prod namespaces.
+
+`spec.exportTo` on an ACK ACM `Certificate` requests an **exportable** public
+certificate: **$7 per FQDN and $79 per wildcard, charged at issuance AND at
+every renewal** on a 198-day validity — about **$158/year** for one wildcard.
+Standard ACM certificates are free.
+
+**It is admission control because nothing else can do the job.** ACM has no IAM
+condition key for the export option, and the charge lands at *issuance*, not at
+export — so withholding `acm:ExportCertificate` stops the private key reaching a
+Secret but does not stop the spend. Rejecting the object at admission is the only
+control that prevents it, because the controller then never calls
+`RequestCertificate` with export enabled.
+
+It is not namespace-scoped because an exportable certificate costs the same in
+dev, and dev is where someone experimenting would reach for `exportTo` first.
+
+The one case `exportTo` serves — in-cluster TLS termination — is already covered,
+free, by cert-manager. See `aj-infra-platform/ack.tf`.

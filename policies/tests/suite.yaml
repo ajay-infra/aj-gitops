@@ -121,3 +121,24 @@ tests:
         object: samples/deploy-partial-label-overlap.yaml
         inventory: [samples/inventory-pdb.yaml]
         assertions: [{violations: yes, message: "PodDisruptionBudget"}]
+
+  # ── deny exportable ACM certificates ──────────────────────────────────────
+  # Tested in both directions specifically because the deny path here is cheap
+  # to get wrong in a way that looks fine: a rule matching the wrong field, or
+  # the wrong apiGroup, denies nothing and there is no bill until someone tries
+  # it. The compliant case must pass, or the constraint would block every
+  # certificate and the estate would quietly stop issuing any.
+  - name: deny-acm-exportable
+    template: ../templates/deny-acm-exportable.yaml
+    constraint: ../constraints/deny-acm-exportable.yaml
+    cases:
+      - name: certificate-without-exportto-is-allowed
+        object: samples/acm-cert-compliant.yaml
+        assertions: [{violations: no}]
+      - name: exportto-is-denied
+        object: samples/acm-cert-exportable.yaml
+        assertions: [{violations: yes, message: "exportTo"}]
+      - name: wildcard-exportto-is-denied
+        object: samples/acm-cert-wildcard-exportable.yaml
+        assertions: [{violations: yes, message: "158"}]
+

@@ -1,0 +1,13 @@
+# The expensive variant — a wildcard is $79 at issuance and $79 again at every
+# renewal on a 198-day validity, so roughly $158/year for this one object.
+apiVersion: acm.services.k8s.aws/v1alpha1
+kind: Certificate
+metadata:
+  name: wildcard-exportable
+  namespace: backend
+spec:
+  domainName: "*.platform.example.com"
+  exportTo:
+    namespace: backend
+    name: wildcard-secret
+    key: tls.crt
