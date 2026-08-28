@@ -5,6 +5,16 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 ## [Unreleased] (2)
 
 ### Fixed
+- **The `k8s-manifests` ApplicationSet deployed the policy test fixtures.** `directory.recurse: true` with no `exclude` deploys every YAML file in the repo, and `k8s-manifests/policies/tests/samples/` holds real manifests that exist to be fed to `gator verify` — several deliberately non-compliant (privileged Pods, `:latest` tags, missing resource limits), plus a live ACK ACM `Certificate` that would request an actual certificate from AWS. They sit inside the pinned `v1.0.0` tag, so this was latent rather than theoretical; it has not fired only because no cluster is provisioned yet. Added `exclude: "policies/tests/**"`.
+  - Found while adding the `deny-acm-exportable` constraint, whose own test samples would have been deployed the same way.
+  - Worth generalising: `recurse: true` against a repo that also holds test fixtures deploys the fixtures. Any repo wired into an ApplicationSet this way needs checking for files that are valid Kubernetes objects but are not meant to exist in a cluster.
+
+### Changed
+- **Route53 ownership is now five writers, not four.** The ACK Route53 controller joins as the owner of ACM DNS-validation CNAMEs.
+  - **Corrects an error in the previous table**, which credited the *ACK ACM controller* with writing its own validation records. It does not — it requests the certificate and then waits for validation it cannot perform. AWS's documentation points at the separate Route53 controller for the CNAMEs, which is why the two are installed as a unit.
+  - Documented why the fifth writer cannot repeat Session 7's external-dns incident: its IAM is scoped to CNAME records only, names beginning `_`, and `CREATE`/`UPSERT` with no `DELETE`, plus a single hosted zone. Bounded by IAM rather than by chart configuration that anyone can edit.
+
+### Fixed
 - **Disabled the 3 broken ApplicationSets** documented in the previous entry (`arc-controller`, `gatekeeper`, `falcon`) rather than leaving them live and broken. Moved to a new `applicationsets/workload/_disabled/` subdirectory, which `bootstrap/*.yaml`'s `bootstrap-workload-platform` Application never syncs (confirmed: no `directory.recurse` set on that Application's source, so ArgoCD doesn't descend into subdirectories of `applicationsets/workload/`). Each file got a banner explaining why and how to re-enable; added `_disabled/README.md` with the same. Not deleted — the design work stays, just inert until real Helm values exist for each.
 
 ## [Unreleased]

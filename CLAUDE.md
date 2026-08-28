@@ -130,9 +130,9 @@ To upgrade: bump `ROLLOUTS_CHART_VERSION` in the workflow, run with `action: upg
 
 ---
 
-## Route53 ownership — four writers, one zone
+## Route53 ownership — five writers, one zone
 
-Four different things write to the hosted zone. Knowing which owns what is the
+Five different things write to the hosted zone. Knowing which owns what is the
 difference between a safe cutover and a deleted production record.
 
 | Writer | Owns | Lifetime |
@@ -140,12 +140,39 @@ difference between a safe cutover and a deleted production record.
 | **Terraform** (`aj-tf-module-cloudfront`) | `blue.<domain>`, `green.<domain>`, the **`active.<domain>` cutover CNAME**, the apex A/alias, and ACM DNS-validation CNAMEs | Permanent |
 | **cert-manager** | `_acme-challenge.*` **TXT**, for DNS-01 validation only | Seconds — created then deleted |
 | **external-dns** | Records for Ingress / `type: LoadBalancer` Services, plus its own TXT registry entries | Follows the workload |
-| **ACK ACM controller** *(not yet deployed)* | ACM DNS-validation CNAMEs for certs it creates | Permanent |
+| **ACK Route53 controller** | ACM DNS-validation CNAMEs, for certificates the ACK ACM controller requests | Permanent |
+
+> **Correction (2026-08-28).** An earlier version of this table credited the
+> **ACK ACM controller** with writing its own validation records. It does not.
+> The ACM controller requests the certificate and then waits for validation it
+> cannot perform; AWS's documentation points at the separate **ACK Route53
+> controller** for the CNAMEs. Deploying acm alone leaves every public
+> certificate in `PENDING_VALIDATION` indefinitely — which is why the two are
+> installed as a unit by a single `install_ack_certificates` toggle.
 
 **cert-manager does NOT manage blue/green traffic records.** It only ever
 creates the ephemeral ACME challenge TXT. Everything about which colour serves
 traffic is Terraform's, and the cutover is one `active_color` value in
 `edge.tfvars`.
+
+### Why the ACK Route53 controller cannot clobber the others
+
+The fifth writer is the one with the most obvious potential to repeat Session
+7's external-dns mistake — a DNS writer holding deletion rights over records it
+did not create. So its blast radius is bounded by **IAM**, not by chart
+configuration that anyone can edit. `aj-infra-platform/ack.tf` scopes it three
+ways simultaneously:
+
+| Constraint | Condition key | Effect |
+|---|---|---|
+| CNAME records only | `ChangeResourceRecordSetsRecordTypes` | cert-manager's `_acme-challenge` **TXT** records are out of reach |
+| Names beginning `_` | `ChangeResourceRecordSetsNormalizedRecordNames` | `blue.`, `green.`, `active.`, apex and every workload record are unmatched |
+| `CREATE` + `UPSERT` | `ChangeResourceRecordSetsActions` | `DELETE` is not granted at all |
+
+Plus a single hosted zone in `Resource`. It therefore cannot remove a record
+even if the controller is compromised or misconfigured — the difference from
+external-dns, whose `policy: sync` was one edited value away from deleting
+production records.
 
 ### Why external-dns cannot clobber the others
 
@@ -322,3 +349,28 @@ Encrypt new secrets:
 ```bash
 sops --encrypt --age $(cat .sops-recipients) secret.yaml > secret.enc.yaml
 ```
+
+---
+
+## `k8s-manifests` ApplicationSet excludes the policy test fixtures
+
+`directory.recurse: true` deploys every YAML file in the repo. `k8s-manifests`
+also contains `policies/tests/samples/` — real manifests that exist to be fed to
+`gator verify`, not to be applied to a cluster. Several are deliberately
+non-compliant (privileged Pods, `:latest` tags, missing resource limits), and
+one is a live ACK ACM `Certificate` that would request an actual certificate
+from AWS.
+
+They are inside the pinned `v1.0.0` tag, so this was latent rather than
+theoretical — it has not fired only because no cluster is provisioned yet.
+
+```yaml
+directory:
+  recurse: true
+  exclude: "policies/tests/**"
+```
+
+**The general shape is worth remembering:** `recurse: true` against a repo that
+also holds test fixtures will deploy the fixtures. Any repo added to an
+ApplicationSet this way needs checking for files that are valid Kubernetes
+objects but are not meant to exist in a cluster.
