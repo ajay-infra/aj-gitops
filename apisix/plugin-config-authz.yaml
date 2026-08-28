@@ -1,0 +1,50 @@
+# ApisixPluginConfig — authorization, applied to every protected route.
+#
+# Bind from a route with:
+#   spec.http[].plugin_config_name: authz
+#
+# Replaces k8s-manifests/kong/{jwt,correlation-id}.yaml. Note what is NOT here:
+# there is no JWT plugin. Token verification happens in OPA — see
+# opa/policy-authz.yaml for why, but the short version is that it makes issuers
+# DATA rather than gateway configuration, which is the difference between adding
+# a tenant with a ConfigMap edit and adding one with a proxy rollout.
+apiVersion: apisix.apache.org/v2
+kind: ApisixPluginConfig
+metadata:
+  name: authz
+  namespace: apisix
+spec:
+  plugins:
+    # Correlation ID, carried over from the Kong config it replaces.
+    - name: request-id
+      enable: true
+      config:
+        header_name: X-Request-Id
+        include_in_response: true
+
+    - name: opa
+      enable: true
+      config:
+        # Resolves to /v1/data/apisix/authz, which is why the Rego package is
+        # `apisix.authz`. Changing either without the other silently returns an
+        # empty document — and an empty result has no `allow` key, which the
+        # plugin treats as denial. Fails closed, but confusingly.
+        host: http://opa.opa.svc.cluster.local:8181
+        policy: apisix/authz
+
+        # Sends consumer metadata when a consumer was identified upstream (by
+        # key-auth or similar), so one policy can authorize both API-key and
+        # JWT callers. Two authentication mechanisms, one authorization surface.
+        with_consumer: true
+        with_route: true
+
+        # An authorization decision is in the request path of every call. Keep
+        # the timeout tight: a slow OPA should fail fast rather than hold
+        # connections. Default is 3000ms, which is far too generous here.
+        timeout: 500
+        keepalive: true
+
+        # Forwards headers OPA sets on the decision — used to pass resolved
+        # identity to upstream services so they need not re-parse the token.
+        send_headers_upstream:
+          - X-Tenant-Id

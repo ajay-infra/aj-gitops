@@ -25,7 +25,8 @@ jobs:
             policies/ \
             karpenter/ \
             keda/ \
-            kong/ \
+            apisix/ \
+            opa/ \
             external-secrets/ \
             falcon/
         # No cloudability/ directory exists yet — see CLAUDE.md Known TODOs
@@ -84,6 +85,38 @@ jobs:
               opa check /tmp/policy.rego && echo "  ✓ Rego valid"
             fi
           done
+
+  apisix-authz-tests:
+    name: APISIX authz policy tests (opa test)
+    runs-on: ubuntu-latest
+    # `opa check` proves the policy compiles. These prove it BEHAVES: that an
+    # unsigned token is rejected, that a wrong issuer or audience is rejected,
+    # and — the one that matters most — that an EMPTY issuer list denies rather
+    # than default-allows. All three fail open if got wrong, and all three are
+    # one typo away.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OPA
+        run: |
+          curl -sL https://openpolicyagent.org/downloads/v0.70.0/opa_linux_amd64_static \
+            -o /usr/local/bin/opa && chmod +x /usr/local/bin/opa
+      - name: Extract Rego from policy ConfigMaps
+        run: |
+          mkdir -p /tmp/rego
+          python3 - <<'EOF'
+          import yaml, glob, os
+          for f in glob.glob('opa/*.yaml'):
+              doc = yaml.safe_load(open(f))
+              for name, body in (doc.get('data') or {}).items():
+                  if name.endswith('.rego'):
+                      open(os.path.join('/tmp/rego', name), 'w').write(body)
+                      print('extracted', name, 'from', f)
+          EOF
+          cp opa/tests/*.rego /tmp/rego/
+      - name: opa check
+        run: opa check /tmp/rego
+      - name: opa test
+        run: opa test /tmp/rego -v
 
   policy-tests:
     name: OPA policy behaviour tests (gator)

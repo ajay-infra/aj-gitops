@@ -4,6 +4,21 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Changed — BREAKING
+- **`kong/` removed; replaced by `apisix/` + `opa/`.** Follows `aj-infra-platform#10`, which swapped Kong for APISIX + standalone OPA. Rationale: `aj-infra-context/arch/gateway-selection.md`.
+  - `kong/jwt.yaml` has **no direct replacement, deliberately.** There is no JWT plugin at the gateway any more. Verification moved into OPA (`opa/policy-authz.yaml`), which makes trusted issuers *data* rather than gateway configuration.
+  - `kong/correlation-id.yaml` → the `request-id` plugin in `apisix/plugin-config-authz.yaml`.
+  - `kong/rate-limiting.yaml` → `limit-count` in `apisix/plugin-config-ratelimit.yaml`, keyed on consumer with fallback to remote address.
+
+### Added
+- **`opa/policy-authz.yaml`** — `package apisix.authz`. Verifies the bearer token with `io.jwt.decode_verify` against issuers held in policy data, then authorizes on the resulting claims. Returns `{allow, reason, status_code}` in the shape the APISIX `opa` plugin expects. Distinguishes 401 (cannot establish who the caller is) from 403 (known and not permitted), because collapsing both makes debugging painful.
+- **`opa/policy-issuers.yaml`** — trusted issuers as data, expressed as a Rego package rather than a JSON data ConfigMap so the document path is deterministic (`data.issuers`) instead of derived from namespace and name. Ships with `providers := []`, so the gateway denies everything until a Keycloak realm exists. **That is the correct failure mode**, and there is a test for it.
+- **`opa/tests/authz_test.rego`** — 9 behaviour cases run by a new `apisix-authz-tests` CI job. Signs **RS256** tokens against a JWKS, because production uses `cert` with a JWKS and `io.jwt.decode_verify` takes `secret` for HMAC — an HMAC test would pass while proving nothing about the path that actually runs. Covers: public paths need no token; missing, garbage, wrong-issuer and wrong-audience tokens denied; valid token allowed; missing tenant → 403; missing roles denied; and **an empty issuer list denies rather than default-allows.**
+  - The RSA key in that file is a throwaway fixture, labelled as such, used nowhere else.
+
+### Note — rate limiting is per-pod until Valkey exists
+`limit-count` is set to `policy: local`, so counters are per-gateway-pod and the effective limit is rate × replicas. Shared counters need a real Valkey endpoint, and `aj-tf-module-valkey` has no consumer (`aj-infra-context#15`) with the engine choice deferred (`#17`). Flagged in the file. **Do not ship `local` to production and describe it as a global limit.**
+
 ### Added
 - **`deny-acm-exportable`** — a ConstraintTemplate + Constraint rejecting any ACK ACM `Certificate` (`acm.services.k8s.aws`) that sets `spec.exportTo`.
   - `exportTo` requests an **exportable** public certificate: **$7 per FQDN and $79 per wildcard, charged at issuance AND at every renewal** on a 198-day validity — roughly **$158/year** per wildcard. Standard ACM certificates are free, and the one case `exportTo` serves (in-cluster TLS termination) is already covered free by cert-manager.

@@ -1,0 +1,52 @@
+# Trusted token issuers — as DATA, not gateway configuration.
+#
+# This file is the whole design in one place. Adding a tenant, rotating a key,
+# or onboarding a customer's own IdP means editing this ConfigMap: a PR, an
+# ArgoCD sync, an OPA policy reload. It does not mean touching the gateway,
+# restarting a proxy, or approaching any provider ceiling.
+#
+# Expressed as a Rego package rather than a JSON data ConfigMap so the document
+# path is deterministic: `package issuers` always yields `data.issuers`.
+# kube-mgmt mounts data ConfigMaps at a path derived from namespace and name,
+# which is fine but easy to get wrong and invisible when you do.
+#
+# ── Expected shape ─────────────────────────────────────────────────────────
+#   iss   the exact `iss` claim to require
+#   aud   the exact `aud` claim to require
+#   jwks  the issuer's JWKS as a JSON STRING (io.jwt.decode_verify's `cert`
+#         constraint accepts a PEM or a JWKS document in string form)
+#
+# ── Under Keycloak Organizations there should be ONE entry ─────────────────
+# Tenants are organizations inside a single realm, so they share an issuer and
+# are distinguished by a claim. If this list starts growing per tenant, that is
+# the signal the identity topology has regressed to the shape that OOM-killed
+# the previous estate — see arch/gateway-selection.md §4.
+#
+# More than one entry is legitimate only when an issuer genuinely cannot be
+# brokered: a customer insisting on their own IdP with no federation. That is
+# the escape hatch, not the norm.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policy-issuers
+  namespace: opa
+  labels:
+    openpolicyagent.org/policy: rego
+data:
+  issuers.rego: |
+    package issuers
+
+    # PLACEHOLDER — no Keycloak realm exists yet. The gateway denies everything
+    # while this is empty, which is the correct failure mode: an empty trust
+    # store must not mean "trust anyone".
+    #
+    # Replace with the real values once Keycloak is deployed and a realm exists:
+    #
+    #   providers := [
+    #     {
+    #       "iss":  "https://keycloak.platform.example.com/realms/platform",
+    #       "aud":  "aj-platform",
+    #       "jwks": `{"keys":[{"kty":"RSA","kid":"...","n":"...","e":"AQAB"}]}`,
+    #     },
+    #   ]
+    providers := []

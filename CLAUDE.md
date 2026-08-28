@@ -81,6 +81,15 @@ namespaces/
   platform-namespaces.yaml    # argocd, monitoring, falcon-system, cloudability, arc-runners
   workload-namespaces.yaml    # frontend, backend, llm, search, data-access
 
+apisix/                       # ApisixPluginConfig — gateway plugin bundles
+  plugin-config-authz.yaml    #   request-id + opa. NO jwt plugin — see opa/
+  plugin-config-ratelimit.yaml#   limit-count; policy: local until Valkey exists
+
+opa/                          # authorization policy for APISIX (NOT Gatekeeper)
+  policy-authz.yaml           #   package apisix.authz — verifies JWT + authorizes
+  policy-issuers.yaml         #   package issuers — trusted issuers AS DATA
+  tests/authz_test.rego       #   opa test; RS256/JWKS, 9 cases
+
 policies/
   constraints/                # Constraint objects (enforcement rules per namespace)
     allowed-registries.yaml
@@ -159,3 +168,52 @@ dev, and dev is where someone experimenting would reach for `exportTo` first.
 
 The one case `exportTo` serves — in-cluster TLS termination — is already covered,
 free, by cert-manager. See `aj-infra-platform/ack.tf`.
+
+---
+
+## `opa/` is not `policies/` — two OPAs, two jobs
+
+Easy to conflate, and conflating them wastes an afternoon.
+
+| | `policies/` | `opa/` |
+|---|---|---|
+| Engine | Gatekeeper (OPA embedded in an admission controller) | standalone OPA (`opa-kube-mgmt`) |
+| Decides | may this Kubernetes object be admitted | may this API request proceed |
+| Called by | the API server, via admission webhooks | APISIX, via the `opa` plugin over HTTP |
+| Tested with | `gator verify` | `opa test` |
+
+Gatekeeper does **not** expose the Data API (`/v1/data/...`) that the APISIX
+plugin queries, so one cannot be pointed at the other. Same language, different
+deployment, different job.
+
+## Why the JWT is verified in OPA rather than at the gateway
+
+This is the load-bearing decision of the whole API layer, and it looks like an
+implementation detail until you know the history.
+
+A prior estate ran per-tenant JWT issuers as **gateway configuration** and
+OOM-killed at ~24 of them against a 16-provider ceiling. Verifying in OPA makes
+issuers **data** (`opa/policy-issuers.yaml`): adding a tenant is a ConfigMap
+edit, an ArgoCD sync and a policy reload — no proxy rollout, no ceiling.
+
+**The rule that follows, and it is absolute:**
+
+> A tenant never appears in gateway configuration. Tenants are claims in the
+> token and rows in policy data.
+
+If `opa/policy-issuers.yaml` starts growing one entry per tenant, the identity
+topology has regressed. Under Keycloak Organizations there should be **one**
+issuer — tenants are organizations inside a single realm, distinguished by a
+claim. More than one entry is legitimate only for a customer whose own IdP
+genuinely cannot be brokered.
+
+**Corollary worth keeping:** API keys and JWTs are different *authentication*
+mechanisms that both land as input to the *same* policy. One authorization
+surface, not two. That is why `with_consumer: true` is set on the `opa` plugin.
+
+## An empty issuer list must deny
+
+`policy-issuers.yaml` ships with `providers := []` because no Keycloak realm
+exists yet, and the gateway therefore denies everything. That is the correct
+failure mode and there is a test for it — an empty trust store must never mean
+"trust anyone". If that test is ever deleted, assume the worst.
