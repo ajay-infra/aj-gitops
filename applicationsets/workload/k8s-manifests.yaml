@@ -43,6 +43,18 @@ spec:
         targetRevision: v1.0.0
         directory:
           recurse: true   # deploy all YAML files in all subdirectories
+          # ...except the policy test fixtures, which are REAL manifests that
+          # exist to be fed to `gator`, not to be applied to a cluster. Several
+          # are deliberately non-compliant (privileged Pods, :latest tags, no
+          # resource limits) and `policies/tests/samples/acm-cert-compliant.yaml`
+          # is a live ACK ACM Certificate that would request an actual
+          # certificate from AWS.
+          #
+          # Without this exclude, recurse:true deploys all of them. They are
+          # inside the pinned v1.0.0 tag, so this was latent rather than
+          # theoretical — it simply has not fired because no cluster is
+          # provisioned yet. Found 2026-08-28 while adding deny-acm-exportable.
+          exclude: "policies/tests/**"
 
       destination:
         server:    "{{server}}"
