@@ -200,4 +200,7 @@ tests:
       - name: platform-namespace-needs-no-product-code
         object: samples/ns-platform-owned.yaml
         assertions: [{violations: no}]
+      - name: saas-namespace-is-out-of-scope
+        object: samples/ns-saas-no-product-code.yaml
+        assertions: [{violations: no}]
 

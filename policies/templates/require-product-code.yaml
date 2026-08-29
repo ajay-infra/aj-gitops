@@ -4,8 +4,9 @@ metadata:
   name: requireproductcode
   annotations:
     description: >-
-      The team label must carry a product code (pim/prd + number) on namespaces
-      that a product or SaaS line pays for. Separate from require-cost-labels
+      The team label must carry a product code (pim/prd + number) on PRODUCT
+      namespaces. SaaS is a separate tagging profile and is deliberately out of
+      scope — see aj-infra-context/arch/tag-profiles.md. Separate from require-cost-labels
       because the estate's namespaces do not carry real product codes yet, so
       this ships in dryrun — it reports without blocking until codes are
       assigned. Enforcing it today would reject every existing namespace.
@@ -29,10 +30,15 @@ spec:
       rego: |
         package requireproductcode
 
-        # Only namespaces a product or SaaS line pays for need a product code.
-        # Platform-owned namespaces — cert-manager, monitoring, falcon — are
-        # overhead, not a product, and forcing a code onto them would invent
-        # one just to satisfy a rule.
+        # Only namespaces a PRODUCT line pays for need a product code.
+        #
+        # Not SaaS: it is a different stack whose chargeback key is likely
+        # `customer`, and a per-customer deployment may have no product code at
+        # all. Applying product's schema there would be satisfiable with
+        # meaningless values — complete-looking tags over useless data.
+        #
+        # Not platform: cert-manager, monitoring and falcon are overhead, and
+        # forcing a code onto them would invent one purely to satisfy a rule.
         violation[{"msg": msg}] {
           cls := input.review.object.metadata.labels["platform.aj/class"]
           applies := object.get(input.parameters, "appliesToClasses", [])

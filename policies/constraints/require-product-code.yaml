@@ -28,7 +28,17 @@ spec:
     # correcting the format is a one-line edit with no policy change — a wrong
     # pattern in an enforcing constraint rejects every namespace it matches.
     pattern: "^(pim|prd)-?[0-9]+$"
-    # Platform and sandbox namespaces are overhead, not a product.
+    # PRODUCT ONLY. `saas` was here and was wrong: SaaS is a different stack
+    # with a different tagging profile, and a per-customer deployment may have
+    # no product code at all — its chargeback key is likely `customer`.
+    #
+    # Applying product's schema to SaaS fails silently rather than loudly: the
+    # tags would be satisfiable with values that mean nothing in a SaaS context,
+    # so they look complete while the cost data is meaningless.
+    #
+    # SaaS stays UNENFORCED until its profile is defined — a known gap beats a
+    # silent one. See aj-infra-context/arch/tag-profiles.md §5.
+    #
+    # Platform and sandbox are overhead, not a product.
     appliesToClasses:
       - product
-      - saas
