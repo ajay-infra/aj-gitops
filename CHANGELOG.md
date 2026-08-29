@@ -4,11 +4,20 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Added — `require-product-line`, shipped in dryrun
+- **SaaS namespaces must declare which product line they belong to** (`platform.aj/product-line`). SaaS has two independent chargeback axes where product has one: revenue is contracted per **customer** and recognised per **product line**, and a customer buys several lines while a line is sold to many customers. `require-cost-labels` carries the first; this carries the second. Neither derives from the other — collapsing them is the mistake `Model` made.
+- **Vocabulary is a constraint parameter** (`allowedLines`: `crm`, `analytics`, `merch`, `pos`, `ticketing`, `shared`), not template Rego and **not the org SCP**. The SCP checks the tag is *present*; only this checks it is *real*. A closed list in an SCP would mean editing the one control an account administrator cannot override every time the business names a product. Adding a line is a one-line edit here.
+- **`shared` is reserved**, on the same reasoning as `pooled` for `platform.aj/customer`. Auth, notifications and the event bus serve every line; without a word for that, absent-because-cross-cutting is indistinguishable from absent-because-forgotten. `shared` spend is allocated by a rule — the label's job is to say a rule is needed.
+- **Ships as `dryrun` for a different reason to `require-product-code`.** That one matches namespaces whose values are wrong. This one matches **no namespace at all** — nothing in the estate is labelled `platform.aj/class: saas` yet. A constraint that selects nothing is indistinguishable from one that finds nothing wrong, so dryrun puts it in the audit log instead of a clean pass. Flip to `deny` when `onboard-saas-customer` emits the label.
+- **SaaS only.** On a product namespace the value would be `shared` or empty on every one, and a field with one possible value is decoration.
+- Seven `gator` cases, including two that assert the constraint is *scoped* rather than merely quiet, and an empty-string case the missing-label rule structurally cannot catch.
+- Full profile: `aj-infra-context/arch/tag-profiles.md` §5.
+
 ### Added — `require-product-code`, shipped in dryrun
 - `team` carries the **product code** (`pim`/`prd` + number), not a descriptive slug — it is the key chargeback groups by.
 - **Ships as `enforcementAction: dryrun`, deliberately.** The estate's namespaces carry `team: product` and `team: platform`; enforcing today would reject **every one of them**. Dryrun reports to the audit log without blocking, which is the honest state while codes are assigned. Flip to `deny` once they are.
 - **Split from `require-cost-labels` rather than folded in**, because that constraint *is* enforcing and must stay that way. One constraint at `deny`, one at `dryrun`, each honest about its readiness.
-- **Only applies to `class: product` and `class: saas`.** Platform namespaces are overhead, not a product — forcing a code onto `monitoring` would invent one purely to satisfy a rule, which is how a taxonomy starts lying.
+- **Only applies to `class: product`.** Platform namespaces are overhead, not a product — forcing a code onto `monitoring` would invent one purely to satisfy a rule, which is how a taxonomy starts lying. `class: saas` was in this list and was removed in #15: SaaS is a separate tagging profile whose chargeback keys are `customer` and `product-line`.
 - The pattern is a **constraint parameter**, not template Rego: a wrong pattern in an enforcing constraint rejects every namespace it matches, so it needs to be a one-line fix with no policy change.
 
 

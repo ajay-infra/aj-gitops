@@ -1,0 +1,76 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: requireproductline
+  annotations:
+    description: >-
+      SaaS namespaces must declare which product line they belong to. SaaS has
+      two independent chargeback axes — customer and product line — because
+      revenue is contracted per customer and recognised per line, and a customer
+      buys several lines while a line is sold to many customers. platform.aj/customer
+      carries the first (require-cost-labels); this carries the second.
+      PRODUCT is out of scope: its chargeback key is the product code on `team`.
+      See aj-infra-context/arch/tag-profiles.md §5.
+spec:
+  crd:
+    spec:
+      names:
+        kind: RequireProductLine
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedLines:
+              type: array
+              items:
+                type: string
+            appliesToClasses:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package requireproductline
+
+        label := "platform.aj/product-line"
+
+        # Missing entirely. Separate from the unknown-value rule so the message
+        # can say what to do rather than listing the vocabulary at someone who
+        # has not met it yet.
+        violation[{"msg": msg}] {
+          in_scope
+          not input.review.object.metadata.labels[label]
+          name := object.get(input.review.object.metadata, "name", "<unnamed>")
+          msg := sprintf(
+            "Namespace '%v' is a SaaS namespace with no '%v' label. Product-line margin cannot be computed without it. Use the line's slug, or 'shared' if this genuinely serves more than one line.",
+            [name, label]
+          )
+        }
+
+        # Present but not a line. An empty string lands here too, and should:
+        # the reserved word for cross-cutting workloads is 'shared', not "".
+        # An empty value is indistinguishable from a forgotten one, which is
+        # the ambiguity the reserved words exist to remove.
+        violation[{"msg": msg}] {
+          in_scope
+          line := input.review.object.metadata.labels[label]
+          allowed := object.get(input.parameters, "allowedLines", [])
+          count(allowed) > 0
+          not in_list(allowed, line)
+          name := object.get(input.review.object.metadata, "name", "<unnamed>")
+          msg := sprintf(
+            "Namespace '%v' has %v '%v', which is not a product line. Cost reports group by this field, so an unregistered value is spend nobody can attribute. Allowed: %v",
+            [name, label, line, allowed]
+          )
+        }
+
+        in_scope {
+          cls := input.review.object.metadata.labels["platform.aj/class"]
+          applies := object.get(input.parameters, "appliesToClasses", [])
+          in_list(applies, cls)
+        }
+
+        in_list(arr, v) {
+          arr[_] == v
+        }

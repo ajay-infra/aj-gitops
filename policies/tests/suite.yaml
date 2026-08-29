@@ -204,3 +204,44 @@ tests:
         object: samples/ns-saas-no-product-code.yaml
         assertions: [{violations: no}]
 
+
+  # ── product line on SaaS namespaces ───────────────────────────────────────
+  # Ships in dryrun for a different reason to require-product-code: that one
+  # matches namespaces whose values are wrong, this one matches NO namespace at
+  # all, because nothing in the estate is labelled platform.aj/class: saas yet.
+  #
+  # Which is exactly the case these assertions have to cover. A constraint that
+  # selects nothing and a constraint that finds nothing wrong are identical from
+  # the outside — the RequirePodDisruptionBudget bug in the header was that
+  # failure exactly. The scope cases below are what tell them apart.
+  - name: require-product-line
+    template: ../templates/require-product-line.yaml
+    constraint: ../constraints/require-product-line.yaml
+    cases:
+      - name: registered-line-is-allowed
+        object: samples/ns-saas-line-compliant.yaml
+        assertions: [{violations: no}]
+      - name: shared-is-a-valid-answer
+        # Cross-cutting infrastructure. Reserved so that absent keeps meaning
+        # forgotten — the same design as `pooled` on platform.aj/customer.
+        object: samples/ns-saas-line-shared.yaml
+        assertions: [{violations: no}]
+      - name: saas-without-a-line-is-flagged
+        object: samples/ns-saas-missing-line.yaml
+        assertions: [{violations: yes, message: "no 'platform.aj/product-line' label"}]
+      - name: unregistered-line-is-flagged
+        object: samples/ns-saas-unknown-line.yaml
+        assertions: [{violations: yes, message: "not a product line"}]
+      - name: empty-line-is-flagged
+        # The key exists, so the missing-label rule cannot fire. If the
+        # vocabulary check did not catch it, "" would pass silently.
+        object: samples/ns-saas-empty-line.yaml
+        assertions: [{violations: yes, message: "not a product line"}]
+      - name: product-namespace-is-out-of-scope
+        # Product's chargeback key is the product code on `team`. This asserts
+        # the constraint is SCOPED, not merely quiet.
+        object: samples/ns-cost-compliant.yaml
+        assertions: [{violations: no}]
+      - name: platform-namespace-is-out-of-scope
+        object: samples/ns-platform-owned.yaml
+        assertions: [{violations: no}]

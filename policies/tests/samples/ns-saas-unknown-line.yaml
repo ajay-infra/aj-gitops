@@ -1,0 +1,11 @@
+# A typo, or a line nobody registered. Either way the spend groups under a value
+# no cost report knows, which is worse than absent because it looks answered.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acme-crmm
+  labels:
+    team: saas-platform
+    platform.aj/class: saas
+    platform.aj/customer: acme-corp
+    platform.aj/product-line: crmm
