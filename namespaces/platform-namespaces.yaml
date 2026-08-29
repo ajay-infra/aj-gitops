@@ -1,5 +1,12 @@
 ---
-# falcon-system — CrowdStrike Falcon sensor (privileged — OPA exclusion applied)
+# falcon-system — CrowdStrike Falcon sensor.
+#
+# `privileged` is required, not sloppiness: an EDR sensor needs host PID, host
+# network and elevated capabilities to see what it exists to see. This is the
+# one namespace where `restricted` would defeat the component's purpose.
+#
+# The exemption is narrow by design — it applies to this namespace only, and the
+# Gatekeeper ignore label below is scoped the same way.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -8,6 +15,13 @@ metadata:
     app.kubernetes.io/managed-by: argocd
     # OPA Gatekeeper excludes this namespace from no-privileged-containers constraint
     admission.gatekeeper.sh/ignore: "true"
+    platform.aj/tier: platform
+    # Deliberately privileged — see the note above. Audit and warn remain at
+    # `restricted` so anything beyond what the sensor genuinely needs still
+    # surfaces in the audit log rather than passing silently.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
 ---
 # cloudability — cost allocation agent
 apiVersion: v1
@@ -17,3 +31,10 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: argocd
     team: platform
+    platform.aj/tier: platform
+    # A cost-reporting agent reads the metrics API. It has no reason to need
+    # anything `restricted` forbids.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

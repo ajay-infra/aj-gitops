@@ -7,6 +7,17 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: argocd
     platform.aj/tier: app
+    # Pod Security Standards. `restricted` is the strict profile: non-root, no
+    # privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
+    # The correct default for anything running application code.
+    #
+    # enforce blocks; audit and warn record. All three at the same level so a
+    # violation shows up in the audit log and at kubectl time, rather than only
+    # as a rejection someone has to work backwards from.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     team: product
 ---
 # backend — API services, workers
@@ -17,6 +28,17 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: argocd
     platform.aj/tier: app
+    # Pod Security Standards. `restricted` is the strict profile: non-root, no
+    # privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
+    # The correct default for anything running application code.
+    #
+    # enforce blocks; audit and warn record. All three at the same level so a
+    # violation shows up in the audit log and at kubectl time, rather than only
+    # as a rejection someone has to work backwards from.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     team: product
 ---
 # data-access — DB proxy, cache adapter services
@@ -27,4 +49,15 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: argocd
     platform.aj/tier: data
+    # Pod Security Standards. `restricted` is the strict profile: non-root, no
+    # privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
+    # The correct default for anything running application code.
+    #
+    # enforce blocks; audit and warn record. All three at the same level so a
+    # violation shows up in the audit log and at kubectl time, rather than only
+    # as a rejection someone has to work backwards from.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
     team: platform
