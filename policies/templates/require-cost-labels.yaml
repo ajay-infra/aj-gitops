@@ -1,0 +1,69 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: requirecostlabels
+  annotations:
+    description: >-
+      Require the labels FinOps needs to attribute container spend: team, class
+      and customer. AWS tags attach to nodes, and many pods share a node — so a
+      tag cannot attribute container cost. Without these, spend is attributable
+      no further than "this cluster", which is exactly wrong for a pooled SaaS
+      cluster where one node runs several customers' workloads.
+spec:
+  crd:
+    spec:
+      names:
+        kind: RequireCostLabels
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedClasses:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package requirecostlabels
+
+        required := ["team", "platform.aj/class", "platform.aj/customer"]
+
+        violation[{"msg": msg}] {
+          key := required[_]
+          not input.review.object.metadata.labels[key]
+          name := object.get(input.review.object.metadata, "name", "<unnamed>")
+          msg := sprintf(
+            "Namespace '%v' is missing the '%v' label. Container spend is allocated from namespace labels — without this, its cost is attributable no further than the cluster.",
+            [name, key]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          cls := input.review.object.metadata.labels["platform.aj/class"]
+          allowed := object.get(input.parameters, "allowedClasses", [])
+          count(allowed) > 0
+          not contains_val(allowed, cls)
+          name := object.get(input.review.object.metadata, "name", "<unnamed>")
+          msg := sprintf(
+            "Namespace '%v' has platform.aj/class '%v', which is not a cost class. Allowed: %v",
+            [name, cls, allowed]
+          )
+        }
+
+        # `customer` must always carry a value — the reserved words `pooled` and
+        # `internal` exist so that ABSENT means forgotten rather than
+        # "not a dedicated customer". An empty string would reintroduce exactly
+        # the ambiguity the reserved values were chosen to remove.
+        violation[{"msg": msg}] {
+          input.review.object.metadata.labels["platform.aj/customer"] == ""
+          name := object.get(input.review.object.metadata, "name", "<unnamed>")
+          msg := sprintf(
+            "Namespace '%v' has an empty platform.aj/customer. Use 'internal' or 'pooled' — an empty value cannot be distinguished from a forgotten one.",
+            [name]
+          )
+        }
+
+        contains_val(arr, v) {
+          arr[_] == v
+        }

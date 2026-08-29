@@ -4,6 +4,18 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Added — FinOps cost attribution labels
+- **`require-cost-labels` constraint** — every namespace must carry `team`, `platform.aj/class` and `platform.aj/customer`. AWS tags attach to nodes and many pods share a node, so a tag cannot attribute container cost; Cloudability allocates from namespace labels. Without these, spend is attributable no further than "this cluster" — exactly wrong for a pooled SaaS cluster where one node runs several customers.
+- Labels applied to all five namespaces. `falcon-system` had no `team` label at all.
+- **`team` and `class` are allowed to differ** — `data-access` is operated by platform and paid for by product.
+- **An empty `platform.aj/customer` is rejected explicitly.** The reserved values `pooled` and `internal` exist so absent means *forgotten*; an empty string would reintroduce the ambiguity they were chosen to remove.
+- Four `gator` cases including a dedicated-customer namespace and the empty-customer rejection.
+
+### Fixed — the taxonomy required an `env` label that cannot exist
+`label-taxonomy.md` listed `env` as a required namespace label. **No namespace had one, and none could:** `k8s-manifests` is synced verbatim to every cluster from a single pinned tag with no templating, so a static `env` label would be wrong in every cluster but one. Environment is a cluster property. Corrected in the taxonomy and documented here.
+
+
+
 ### Fixed — the segment label was decorative, and the policies were fail-open
 - **Network policies now select on the namespace label** (`io.cilium.k8s.namespace.labels.platform.aj/segment`) instead of hardcoded namespace names. The previous version contained **zero references** to the label it was supposedly built around — it matched `io.kubernetes.pod.namespace` against fixed lists.
   - **This was fail-open.** Cilium leaves an endpoint unrestricted until some policy selects it, so a namespace absent from those lists received **no policy at all** and had full connectivity, silently. Onboarding a team would have produced an unsegmented namespace with nothing to indicate it — the exact inverse of the intended property.

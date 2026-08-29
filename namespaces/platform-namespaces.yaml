@@ -13,9 +13,20 @@ metadata:
   name: falcon-system
   labels:
     app.kubernetes.io/managed-by: argocd
+    team: platform
     # OPA Gatekeeper excludes this namespace from no-privileged-containers constraint
     admission.gatekeeper.sh/ignore: "true"
     platform.aj/segment: platform
+    # Cost attribution. `team` is who OPERATES this; `class` is who PAYS for it,
+    # and they are allowed to differ — data-access is operated by platform and
+    # paid for by product.
+    #
+    # No `env` label, deliberately: k8s-manifests is synced verbatim to every
+    # cluster from one pinned tag, so a static env label would be wrong in all
+    # but one. Environment is a CLUSTER property; Cloudability takes it from
+    # there.
+    platform.aj/class: platform
+    platform.aj/customer: internal
     # Deliberately privileged — see the note above. Audit and warn remain at
     # `restricted` so anything beyond what the sensor genuinely needs still
     # surfaces in the audit log rather than passing silently.
@@ -32,6 +43,16 @@ metadata:
     app.kubernetes.io/managed-by: argocd
     team: platform
     platform.aj/segment: platform
+    # Cost attribution. `team` is who OPERATES this; `class` is who PAYS for it,
+    # and they are allowed to differ — data-access is operated by platform and
+    # paid for by product.
+    #
+    # No `env` label, deliberately: k8s-manifests is synced verbatim to every
+    # cluster from one pinned tag, so a static env label would be wrong in all
+    # but one. Environment is a CLUSTER property; Cloudability takes it from
+    # there.
+    platform.aj/class: platform
+    platform.aj/customer: internal
     # A cost-reporting agent reads the metrics API. It has no reason to need
     # anything `restricted` forbids.
     pod-security.kubernetes.io/enforce: restricted

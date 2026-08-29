@@ -1,0 +1,11 @@
+# The ambiguity the reserved values exist to prevent: an empty customer cannot
+# be distinguished from a forgotten one, so cost silently stops being
+# attributable exactly where it matters.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acme-prod
+  labels:
+    team: saas-team
+    platform.aj/class: saas
+    platform.aj/customer: ""

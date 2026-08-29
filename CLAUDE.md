@@ -309,3 +309,42 @@ Together: label a namespace, it is segmented. Forget to, and it does not exist.
 customer *pricing* tiers in `onboard-saas-customer`. Adding a sixth to a
 codebase that had just finished untangling the first was not worth the
 familiarity. `segment` says what it is.
+
+---
+
+## FinOps labels — `team`, `platform.aj/class`, `platform.aj/customer`
+
+Enforced on every namespace by `require-cost-labels`. Design:
+`aj-infra-context/arch/label-taxonomy.md`.
+
+**Why Kubernetes needs its own cost labels.** AWS tags attach to *nodes*, and
+many pods share a node — so a tag cannot attribute container cost. Cloudability
+allocates from namespace labels. Without these, spend is attributable no further
+than "this cluster", which is exactly wrong for a pooled SaaS cluster where one
+node runs several customers' workloads.
+
+| label | answers |
+|---|---|
+| `team` | who **operates** this |
+| `platform.aj/class` | who **pays** — platform \| product \| saas \| sandbox |
+| `platform.aj/customer` | which customer — slug \| `pooled` \| `internal` |
+
+**`team` and `class` are allowed to differ**, and `data-access` is the worked
+example: operated by platform, paid for by product.
+
+### `customer` is always present, never empty
+
+Reserved values `pooled` and `internal` exist so that **absent means forgotten**.
+The alternative — set it for dedicated customers, omit it otherwise — makes
+absent-because-pooled indistinguishable from absent-because-forgotten, and no
+constraint can tell them apart. An empty string reintroduces the same ambiguity,
+so it is rejected explicitly.
+
+### There is no `env` label, deliberately
+
+`k8s-manifests` is synced **verbatim** to every cluster from one pinned tag, with
+no templating. A static `env` label would therefore be wrong in every cluster but
+one. Environment is a **cluster** property and Cloudability takes it from there.
+
+The taxonomy previously listed `env` as a required namespace label. It was never
+set on any namespace, and could not have been.

@@ -7,6 +7,16 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: argocd
     platform.aj/segment: app
+    # Cost attribution. `team` is who OPERATES this; `class` is who PAYS for it,
+    # and they are allowed to differ — data-access is operated by platform and
+    # paid for by product.
+    #
+    # No `env` label, deliberately: k8s-manifests is synced verbatim to every
+    # cluster from one pinned tag, so a static env label would be wrong in all
+    # but one. Environment is a CLUSTER property; Cloudability takes it from
+    # there.
+    platform.aj/class: product
+    platform.aj/customer: internal
     # Pod Security Standards. `restricted` is the strict profile: non-root, no
     # privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
     # The correct default for anything running application code.
@@ -28,6 +38,16 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: argocd
     platform.aj/segment: app
+    # Cost attribution. `team` is who OPERATES this; `class` is who PAYS for it,
+    # and they are allowed to differ — data-access is operated by platform and
+    # paid for by product.
+    #
+    # No `env` label, deliberately: k8s-manifests is synced verbatim to every
+    # cluster from one pinned tag, so a static env label would be wrong in all
+    # but one. Environment is a CLUSTER property; Cloudability takes it from
+    # there.
+    platform.aj/class: product
+    platform.aj/customer: internal
     # Pod Security Standards. `restricted` is the strict profile: non-root, no
     # privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
     # The correct default for anything running application code.
@@ -49,6 +69,16 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: argocd
     platform.aj/segment: data
+    # Cost attribution. `team` is who OPERATES this; `class` is who PAYS for it,
+    # and they are allowed to differ — data-access is operated by platform and
+    # paid for by product.
+    #
+    # No `env` label, deliberately: k8s-manifests is synced verbatim to every
+    # cluster from one pinned tag, so a static env label would be wrong in all
+    # but one. Environment is a CLUSTER property; Cloudability takes it from
+    # there.
+    platform.aj/class: product
+    platform.aj/customer: internal
     # Pod Security Standards. `restricted` is the strict profile: non-root, no
     # privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
     # The correct default for anything running application code.

@@ -161,3 +161,24 @@ tests:
         object: samples/ns-segment-unknown.yaml
         assertions: [{violations: yes, message: "not a known segment"}]
 
+  # ── require cost-attribution labels ───────────────────────────────────────
+  # The failure these prevent is not an outage — it is a bill nobody can split.
+  # Silent, and only discovered when someone asks whether a customer is
+  # profitable and finds the data was never collected.
+  - name: require-cost-labels
+    template: ../templates/require-cost-labels.yaml
+    constraint: ../constraints/require-cost-labels.yaml
+    cases:
+      - name: fully-labelled-namespace-is-allowed
+        object: samples/ns-cost-compliant.yaml
+        assertions: [{violations: no}]
+      - name: dedicated-customer-namespace-is-allowed
+        object: samples/ns-cost-dedicated-customer.yaml
+        assertions: [{violations: no}]
+      - name: missing-class-is-denied
+        object: samples/ns-cost-missing-class.yaml
+        assertions: [{violations: yes, message: "platform.aj/class"}]
+      - name: empty-customer-is-denied
+        object: samples/ns-cost-empty-customer.yaml
+        assertions: [{violations: yes, message: "cannot be distinguished from a forgotten one"}]
+
