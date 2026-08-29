@@ -4,15 +4,27 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
-### Added — network tiering (`platform.aj/tier`)
-Implements `aj-infra-context/arch/network-tiering.md`. **Allow rules only; enforcement is not switched on.**
+### Fixed — the segment label was decorative, and the policies were fail-open
+- **Network policies now select on the namespace label** (`io.cilium.k8s.namespace.labels.platform.aj/segment`) instead of hardcoded namespace names. The previous version contained **zero references** to the label it was supposedly built around — it matched `io.kubernetes.pod.namespace` against fixed lists.
+  - **This was fail-open.** Cilium leaves an endpoint unrestricted until some policy selects it, so a namespace absent from those lists received **no policy at all** and had full connectivity, silently. Onboarding a team would have produced an unsegmented namespace with nothing to indicate it — the exact inverse of the intended property.
+  - Now self-extending: label a namespace and it is segmented, with no file to edit.
+  - ⚠ The selector form `io.cilium.k8s.namespace.labels.platform.aj/segment` is valid (one slash, per Kubernetes label rules) but has not been exercised against a live cluster. Verify with `cilium policy get` on first deploy.
+- **`require-segment-label` Gatekeeper constraint** — a namespace cannot be created without a valid `platform.aj/segment`. Turns fail-open into fail-to-create. Two distinct violations, because "you forgot a label" and "that is not a segment" need different fixes and a single generic message sends people looking in the wrong place. Three `gator` cases, all passing. System namespaces excluded: the cluster creates them before any policy exists.
+
+### Changed — `platform.aj/tier` renamed to `platform.aj/segment`
+`tier` already meant five different things here: cluster shape (now `kind`/`stage`/`size`), the central `nonprod|prod` split, the ArgoCD `workload|central` Secret label, RBAC tiers in `register-namespace`, and customer **pricing** tiers in `onboard-saas-customer`. A sixth meaning, added one session after recording that this exact trap exists, was not worth the familiarity.
+
+
+
+### Added — network tiering (`platform.aj/segment`)
+Implements `aj-infra-context/arch/network-segmentation.md`. **Allow rules only; enforcement is not switched on.**
 
 - **`network-policies/`** — `CiliumNetworkPolicy` per tier. Cilium is installed and, before this, **not one policy existed** — every pod could reach every other pod. Rules key on `io.kubernetes.pod.namespace`, which Cilium adds to every endpoint automatically, so they work without every workload author remembering a label and cannot be bypassed by omitting one.
   - `platform` is deliberately **not reachable from `app`** — a compromised workload must not have a network path to OPA, External Secrets or cert-manager, which hold the credentials and make the decisions that constrain it. The single exception is OPA from `edge`, which is the authorization call path.
   - OPA has **no `world` egress**: it must not fetch JWKS over the internet per request. Keys live in policy data.
-- **Karpenter tier pools** — new `edge`, `platform` and `data` NodePools; `platform.aj/tier: app` added to `frontend`, `backend` and `gpu`. Tier and `workload` are separate axes and compose; neither replaces the other.
+- **Karpenter tier pools** — new `edge`, `platform` and `data` NodePools; `platform.aj/segment: app` added to `frontend`, `backend` and `gpu`. Tier and `workload` are separate axes and compose; neither replaces the other.
 - **`karpenter/node-classes/data-access.yaml`** — the reason `data` is a tier rather than a label. **Aurora authorizes by security group and a security group cannot see pods**, only the node's ENI. So database reachability is only enforceable by controlling which nodes carry a trusted group, which makes it a reviewable scheduling decision instead of an ambient property.
-- Namespace `platform.aj/tier` labels on `frontend`, `backend`, `data-access`.
+- Namespace `platform.aj/segment` labels on `frontend`, `backend`, `data-access`.
 
 ### ⚠ Known-incomplete, deliberately
 - **`karpenter.sh/data-access` security group does not exist.** It needs creating Terraform-side with Aurora's and Valkey's ingress narrowed to reference only it — blocked on `aj-infra-context#24` / `#15`. Until then the `data` pool will not provision, which is the correct failure mode: better a pod that will not schedule than one reaching the database because it landed on a broadly-permitted node.

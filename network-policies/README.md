@@ -1,7 +1,7 @@
 # Network policies
 
 `CiliumNetworkPolicy` expressing the tiers in
-`aj-infra-context/arch/network-tiering.md` §3.
+`aj-infra-context/arch/network-segmentation.md` §3.
 
 ## Read this before adding a default-deny
 
@@ -15,7 +15,7 @@ direction the policy covers.
 That is the whole hazard. **Order is not a style preference:**
 
 ```
-1. label        namespaces and pods carry platform.aj/tier
+1. label        namespaces and pods carry platform.aj/segment
 2. allow        write these policies, covering every real flow
 3. observe      Hubble — confirm nothing legitimate is being dropped
 4. deny         only then, policyEnforcementMode: always
@@ -44,7 +44,7 @@ Namespace → tier:
 - **DNS and the K8s API** are allowed explicitly in each policy. They are the
   two things that break first under default-deny and the two most often
   forgotten.
-- **Cross-cluster** is out of scope — see `network-tiering.md` §5. The recurring
+- **Cross-cluster** is out of scope — see `network-segmentation.md` §5. The recurring
   legitimate flow is workload → central, which crosses VPCs rather than pods.
 - **Egress to the data subnets** is a CIDR rule in `data.yaml`, and the CIDR is
   a placeholder until the data layer exists.

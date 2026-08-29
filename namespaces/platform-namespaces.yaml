@@ -15,7 +15,7 @@ metadata:
     app.kubernetes.io/managed-by: argocd
     # OPA Gatekeeper excludes this namespace from no-privileged-containers constraint
     admission.gatekeeper.sh/ignore: "true"
-    platform.aj/tier: platform
+    platform.aj/segment: platform
     # Deliberately privileged — see the note above. Audit and warn remain at
     # `restricted` so anything beyond what the sensor genuinely needs still
     # surfaces in the audit log rather than passing silently.
@@ -31,7 +31,7 @@ metadata:
   labels:
     app.kubernetes.io/managed-by: argocd
     team: platform
-    platform.aj/tier: platform
+    platform.aj/segment: platform
     # A cost-reporting agent reads the metrics API. It has no reason to need
     # anything `restricted` forbids.
     pod-security.kubernetes.io/enforce: restricted

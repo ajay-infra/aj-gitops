@@ -142,3 +142,22 @@ tests:
         object: samples/acm-cert-wildcard-exportable.yaml
         assertions: [{violations: yes, message: "158"}]
 
+  # ── require a network segment on every namespace ──────────────────────────
+  # The deny cases matter because the failure they prevent is invisible: a
+  # namespace without this label gets no CiliumNetworkPolicy, and Cilium leaves
+  # unselected endpoints unrestricted. Nothing errors; the namespace is simply
+  # open.
+  - name: require-segment-label
+    template: ../templates/require-segment-label.yaml
+    constraint: ../constraints/require-segment-label.yaml
+    cases:
+      - name: labelled-namespace-is-allowed
+        object: samples/ns-segment-compliant.yaml
+        assertions: [{violations: no}]
+      - name: missing-label-is-denied
+        object: samples/ns-segment-missing.yaml
+        assertions: [{violations: yes, message: "no platform.aj/segment label"}]
+      - name: unknown-segment-is-denied
+        object: samples/ns-segment-unknown.yaml
+        assertions: [{violations: yes, message: "not a known segment"}]
+

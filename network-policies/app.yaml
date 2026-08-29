@@ -1,51 +1,47 @@
 # app — workload pods.
 #
-# The important property here is what is ABSENT from ingress: `app` is
-# reachable from `edge` and from other `app` pods, and from nothing else. Not
-# from the internet, and not from `platform`.
+# Selects on the namespace label, so a newly labelled namespace is segmented
+# without editing this file. See edge.yaml for why the hardcoded-namespace
+# version was fail-open.
+#
+# The important property is what is ABSENT from ingress: `app` is reachable from
+# `edge` and from other `app` namespaces, and from nothing else. Not from the
+# internet, and not from `platform`.
 apiVersion: cilium.io/v2
 kind: CiliumClusterwideNetworkPolicy
 metadata:
-  name: tier-app
+  name: segment-app
 spec:
   endpointSelector:
-    matchExpressions:
-      - key: io.kubernetes.pod.namespace
-        operator: In
-        values: [frontend, backend, llm, search]
+    matchLabels:
+      io.cilium.k8s.namespace.labels.platform.aj/segment: app
 
   ingress:
     - fromEndpoints:
         - matchLabels:
-            io.kubernetes.pod.namespace: apisix
+            io.cilium.k8s.namespace.labels.platform.aj/segment: edge
 
-    # Same-tier east-west. Broader than ideal — a per-namespace split would be
-    # tighter, but that is a decision for when real services exist rather than
-    # a guess now.
+    # Same-segment east-west. Broader than ideal — a per-namespace split would
+    # be tighter, but that is a decision for when real services exist rather
+    # than a guess now.
     - fromEndpoints:
-        - matchExpressions:
-            - key: io.kubernetes.pod.namespace
-              operator: In
-              values: [frontend, backend, llm, search]
+        - matchLabels:
+            io.cilium.k8s.namespace.labels.platform.aj/segment: app
 
-    # Prometheus/Alloy scraping.
     - fromEndpoints:
         - matchLabels:
             io.kubernetes.pod.namespace: monitoring
 
   egress:
-    # To the data tier — and ONLY to the data tier. `app` has no route to the
-    # data subnets itself; see data.yaml for why that boundary is real rather
-    # than declarative.
+    # To `data` and only to `data`. `app` has no route to the data subnets
+    # itself — see data.yaml for why that boundary is real rather than declared.
     - toEndpoints:
         - matchLabels:
-            io.kubernetes.pod.namespace: data-access
+            io.cilium.k8s.namespace.labels.platform.aj/segment: data
 
     - toEndpoints:
-        - matchExpressions:
-            - key: io.kubernetes.pod.namespace
-              operator: In
-              values: [frontend, backend, llm, search]
+        - matchLabels:
+            io.cilium.k8s.namespace.labels.platform.aj/segment: app
 
     - toEndpoints:
         - matchLabels:

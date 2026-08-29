@@ -1,0 +1,27 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RequireSegmentLabel
+metadata:
+  name: require-segment-label-on-namespaces
+  annotations:
+    description: >-
+      Applies to every namespace except the Kubernetes system ones, which are
+      created by the cluster itself before any policy exists and cannot be
+      labelled by us.
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - default
+      - gatekeeper-system
+  parameters:
+    allowed:
+      - edge
+      - platform
+      - app
+      - data

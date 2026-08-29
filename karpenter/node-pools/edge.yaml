@@ -20,7 +20,7 @@ spec:
       labels:
         workload: edge
         node-pool: edge
-        platform.aj/tier: edge
+        platform.aj/segment: edge
     spec:
       nodeClassRef:
         group: karpenter.k8s.aws
@@ -39,7 +39,7 @@ spec:
             - m6i.large
             - m6i.xlarge
       taints:
-        - key: platform.aj/tier
+        - key: platform.aj/segment
           value: edge
           effect: NoSchedule
   limits:

@@ -21,7 +21,7 @@ spec:
       labels:
         workload: platform
         node-pool: platform
-        platform.aj/tier: platform
+        platform.aj/segment: platform
     spec:
       nodeClassRef:
         group: karpenter.k8s.aws
@@ -40,7 +40,7 @@ spec:
             - m6i.large
             - m6i.xlarge
       taints:
-        - key: platform.aj/tier
+        - key: platform.aj/segment
           value: platform
           effect: NoSchedule
   limits:

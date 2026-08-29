@@ -33,7 +33,7 @@ spec:
       labels:
         workload: data-access
         node-pool: data
-        platform.aj/tier: data
+        platform.aj/segment: data
     spec:
       nodeClassRef:
         group: karpenter.k8s.aws
@@ -52,7 +52,7 @@ spec:
             - m6i.large
             - m6i.xlarge
       taints:
-        - key: platform.aj/tier
+        - key: platform.aj/segment
           value: data
           effect: NoSchedule
   limits:

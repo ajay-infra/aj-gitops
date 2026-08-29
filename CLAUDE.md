@@ -83,7 +83,7 @@ namespaces/
 
 network-policies/             # CiliumNetworkPolicy per tier — ALLOW rules only
   README.md                   #   read before adding default-deny
-  edge.yaml app.yaml          #   platform.aj/tier boundaries
+  edge.yaml app.yaml          #   platform.aj/segment boundaries
   data.yaml platform.yaml
 
 apisix/                       # ApisixPluginConfig — gateway plugin bundles
@@ -225,11 +225,11 @@ failure mode and there is a test for it — an empty trust store must never mean
 
 ---
 
-## Network tiering — `platform.aj/tier`
+## Network segmentation — `platform.aj/segment`
 
-Design: `aj-infra-context/arch/network-tiering.md`. What matters when editing:
+Design: `aj-infra-context/arch/network-segmentation.md`. What matters when editing:
 
-| tier | namespaces | reachable from |
+| segment | namespaces | reachable from |
 |---|---|---|
 | `edge` | `apisix` | the internet-facing NLB **only** |
 | `platform` | `opa`, `cert-manager`, `external-secrets`, `monitoring`, … | cluster-internal; OPA from `edge` |
@@ -240,7 +240,7 @@ Design: `aj-infra-context/arch/network-tiering.md`. What matters when editing:
 
 Conflating these is where the difficulty comes from:
 
-- **Where a pod runs** — Karpenter NodePools with `platform.aj/tier` labels and taints
+- **Where a pod runs** — Karpenter NodePools with `platform.aj/segment` labels and taints
 - **What a pod can reach** — `network-policies/`
 - **What a node can reach** — subnet, security group, route table (Terraform)
 
@@ -282,3 +282,30 @@ If backend connects directly, `data` is not a tier and the security-group
 boundary buys nothing. If data-access proxies, the boundary is real. The proxy
 model is stronger and is what `data.yaml` assumes — but it costs a hop and a
 proxy to operate, and should be decided rather than inherited.
+
+### The label is load-bearing, and enforced
+
+Two things changed after the first version of this shipped:
+
+**The policies read the label.** They select on
+`io.cilium.k8s.namespace.labels.platform.aj/segment`, not on hardcoded namespace
+names. The first version hardcoded names, which was **fail-open**: Cilium leaves
+an endpoint unrestricted until a policy selects it, so a namespace absent from
+the list got no policy and full connectivity — silently. Onboarding a team would
+have produced an unsegmented namespace with nothing to say so.
+
+**Gatekeeper requires it** — `policies/constraints/require-segment-label.yaml`.
+A namespace cannot be created without a valid segment, which turns fail-open
+into fail-to-create. System namespaces are excluded because the cluster creates
+them before any policy exists.
+
+Together: label a namespace, it is segmented. Forget to, and it does not exist.
+
+### Why `segment` and not `tier`
+
+`tier` already meant five different things in this estate — cluster shape (now
+`kind`/`stage`/`size`), the central `nonprod|prod` split, the ArgoCD
+`workload|central` Secret label, RBAC tiers in `register-namespace`, and
+customer *pricing* tiers in `onboard-saas-customer`. Adding a sixth to a
+codebase that had just finished untangling the first was not worth the
+familiarity. `segment` says what it is.

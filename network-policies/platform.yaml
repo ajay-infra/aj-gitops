@@ -8,20 +8,25 @@
 #
 # The single exception is OPA, reachable from `edge` only, because that is the
 # authorization call path.
+#
+# Scoped to the OPA namespace rather than the whole `platform` segment: the
+# other add-ons have varied and mostly cluster-internal traffic patterns, and a
+# blanket policy over all of them would either be too loose to mean anything or
+# would break something on first contact. OPA is the one with a well-defined
+# call path, so it is the one worth constraining first.
 apiVersion: cilium.io/v2
 kind: CiliumNetworkPolicy
 metadata:
-  name: tier-platform-opa
+  name: segment-platform-opa
   namespace: opa
 spec:
   endpointSelector: {}
 
   ingress:
-    # The one deliberate hole in the platform boundary. `edge` calls OPA on
-    # every request; nothing else may.
+    # The one deliberate hole in the platform boundary.
     - fromEndpoints:
         - matchLabels:
-            io.kubernetes.pod.namespace: apisix
+            io.cilium.k8s.namespace.labels.platform.aj/segment: edge
       toPorts:
         - ports:
             - port: "8181"

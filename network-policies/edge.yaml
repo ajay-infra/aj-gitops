@@ -1,18 +1,35 @@
-# edge — the API gateway tier (APISIX).
+# edge — the API gateway segment.
 #
-# The only tier the internet-facing NLB targets, and therefore the only ingress
-# point for external traffic.
+# ── Selects on the NAMESPACE LABEL, not on namespace names ──────────────────
+# The first version of this file hardcoded `io.kubernetes.pod.namespace: apisix`
+# and friends. That was fail-open: Cilium leaves an endpoint unrestricted until
+# some policy selects it, so a namespace absent from the hardcoded list got NO
+# policy and full connectivity — silently. Onboarding a team would have produced
+# an unsegmented namespace with nothing to say so.
+#
+# Selecting on `io.cilium.k8s.namespace.labels.platform.aj/segment` makes these
+# policies self-extending: label a namespace, it is segmented. Combined with the
+# Gatekeeper constraint that requires the label
+# (policies/constraints/require-segment-label.yaml), a namespace cannot exist
+# without falling under one of these policies.
+#
+# ⚠ VERIFY ON FIRST DEPLOY. Cilium exposes namespace labels to selectors as
+# `io.cilium.k8s.namespace.labels.<key>`. With a slash-bearing key this becomes
+# `io.cilium.k8s.namespace.labels.platform.aj/segment`, which is a valid label
+# key (one slash) but has not been exercised against a live cluster here.
+# Confirm with `cilium policy get` before relying on it.
 apiVersion: cilium.io/v2
-kind: CiliumNetworkPolicy
+kind: CiliumClusterwideNetworkPolicy
 metadata:
-  name: tier-edge
-  namespace: apisix
+  name: segment-edge
 spec:
-  endpointSelector: {}
+  endpointSelector:
+    matchLabels:
+      io.cilium.k8s.namespace.labels.platform.aj/segment: edge
 
   ingress:
-    # From outside the cluster, via the NLB. `world` rather than a CIDR because
-    # the NLB preserves client IPs and those are not knowable in advance.
+    # From outside, via the NLB. `world` rather than a CIDR because the NLB
+    # preserves client IPs and those are not knowable in advance.
     - fromEntities:
         - world
       toPorts:
@@ -22,16 +39,15 @@ spec:
             - port: "8443"
               protocol: TCP
 
-    # Health checks from the load balancer.
     - fromEntities:
         - health
 
   egress:
     # The authorization decision. Every request the gateway serves depends on
-    # this call, so it is the single most important egress rule in the estate —
-    # if it is missing, the gateway fails closed and nothing serves.
+    # this call — if it is missing the gateway fails closed and nothing serves.
     - toEndpoints:
         - matchLabels:
+            io.cilium.k8s.namespace.labels.platform.aj/segment: platform
             io.kubernetes.pod.namespace: opa
       toPorts:
         - ports:
@@ -41,13 +57,7 @@ spec:
     # Upstream workloads. `edge` reaches `app`, never `data` directly.
     - toEndpoints:
         - matchLabels:
-            io.kubernetes.pod.namespace: frontend
-        - matchLabels:
-            io.kubernetes.pod.namespace: backend
-        - matchLabels:
-            io.kubernetes.pod.namespace: llm
-        - matchLabels:
-            io.kubernetes.pod.namespace: search
+            io.cilium.k8s.namespace.labels.platform.aj/segment: app
 
     - toEndpoints:
         - matchLabels:

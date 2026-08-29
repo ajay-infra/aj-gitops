@@ -1,0 +1,9 @@
+# The case this constraint exists for: a namespace onboarded without a segment.
+# Before the constraint, this was created happily and got no network policy at
+# all — unrestricted, with nothing to indicate it.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+  labels:
+    app.kubernetes.io/managed-by: argocd

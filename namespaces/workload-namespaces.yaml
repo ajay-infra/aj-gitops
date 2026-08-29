@@ -6,7 +6,7 @@ metadata:
   name: frontend
   labels:
     app.kubernetes.io/managed-by: argocd
-    platform.aj/tier: app
+    platform.aj/segment: app
     # Pod Security Standards. `restricted` is the strict profile: non-root, no
     # privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
     # The correct default for anything running application code.
@@ -27,7 +27,7 @@ metadata:
   name: backend
   labels:
     app.kubernetes.io/managed-by: argocd
-    platform.aj/tier: app
+    platform.aj/segment: app
     # Pod Security Standards. `restricted` is the strict profile: non-root, no
     # privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
     # The correct default for anything running application code.
@@ -48,7 +48,7 @@ metadata:
   name: data-access
   labels:
     app.kubernetes.io/managed-by: argocd
-    platform.aj/tier: data
+    platform.aj/segment: data
     # Pod Security Standards. `restricted` is the strict profile: non-root, no
     # privilege escalation, all capabilities dropped, seccomp RuntimeDefault.
     # The correct default for anything running application code.

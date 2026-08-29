@@ -1,0 +1,8 @@
+# A typo, or an invented segment. No policy selects it, so the effect is
+# identical to having no label — unrestricted. Worth its own message.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+  labels:
+    platform.aj/segment: aplication
