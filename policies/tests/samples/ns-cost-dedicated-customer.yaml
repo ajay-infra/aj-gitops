@@ -3,6 +3,6 @@ kind: Namespace
 metadata:
   name: acme-prod
   labels:
-    team: saas-team
+    team: pim-88
     platform.aj/class: saas
     platform.aj/customer: acme-corp

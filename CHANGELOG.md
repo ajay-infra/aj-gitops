@@ -4,6 +4,15 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Added — `require-product-code`, shipped in dryrun
+- `team` carries the **product code** (`pim`/`prd` + number), not a descriptive slug — it is the key chargeback groups by.
+- **Ships as `enforcementAction: dryrun`, deliberately.** The estate's namespaces carry `team: product` and `team: platform`; enforcing today would reject **every one of them**. Dryrun reports to the audit log without blocking, which is the honest state while codes are assigned. Flip to `deny` once they are.
+- **Split from `require-cost-labels` rather than folded in**, because that constraint *is* enforcing and must stay that way. One constraint at `deny`, one at `dryrun`, each honest about its readiness.
+- **Only applies to `class: product` and `class: saas`.** Platform namespaces are overhead, not a product — forcing a code onto `monitoring` would invent one purely to satisfy a rule, which is how a taxonomy starts lying.
+- The pattern is a **constraint parameter**, not template Rego: a wrong pattern in an enforcing constraint rejects every namespace it matches, so it needs to be a one-line fix with no policy change.
+
+
+
 ### Added — FinOps cost attribution labels
 - **`require-cost-labels` constraint** — every namespace must carry `team`, `platform.aj/class` and `platform.aj/customer`. AWS tags attach to nodes and many pods share a node, so a tag cannot attribute container cost; Cloudability allocates from namespace labels. Without these, spend is attributable no further than "this cluster" — exactly wrong for a pooled SaaS cluster where one node runs several customers.
 - Labels applied to all five namespaces. `falcon-system` had no `team` label at all.

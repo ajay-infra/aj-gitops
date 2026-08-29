@@ -182,3 +182,22 @@ tests:
         object: samples/ns-cost-empty-customer.yaml
         assertions: [{violations: yes, message: "cannot be distinguished from a forgotten one"}]
 
+  # ── product code on the team label ────────────────────────────────────────
+  # Ships in dryrun: the estate's namespaces carry "product" and "platform",
+  # not product codes, so enforcing today would reject every one. The tests
+  # still assert the rule is CORRECT — dryrun changes whether a violation
+  # blocks, not whether it is detected.
+  - name: require-product-code
+    template: ../templates/require-product-code.yaml
+    constraint: ../constraints/require-product-code.yaml
+    cases:
+      - name: product-code-is-allowed
+        object: samples/ns-cost-compliant.yaml
+        assertions: [{violations: no}]
+      - name: descriptive-slug-on-a-product-namespace-is-flagged
+        object: samples/ns-cost-bad-team.yaml
+        assertions: [{violations: yes, message: "not a product code"}]
+      - name: platform-namespace-needs-no-product-code
+        object: samples/ns-platform-owned.yaml
+        assertions: [{violations: no}]
+

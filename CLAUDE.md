@@ -348,3 +348,22 @@ one. Environment is a **cluster** property and Cloudability takes it from there.
 
 The taxonomy previously listed `env` as a required namespace label. It was never
 set on any namespace, and could not have been.
+
+### `team` is a product code, and that constraint is in dryrun
+
+`team` carries `pim`/`prd` + number — the chargeback key — not a descriptive
+slug. `require-product-code` checks it, and **ships in `dryrun`** because the
+namespaces here still carry `product` and `platform`. Enforcing it today would
+reject every namespace in the repo.
+
+Two deliberate choices:
+
+- **Separate constraint from `require-cost-labels`.** That one enforces at
+  `deny` and must keep doing so. Mixing a not-ready rule into it would have
+  meant weakening a rule that *is* ready.
+- **Applies only to `class: product` and `class: saas`.** Platform namespaces
+  are overhead, not a product. Requiring a code on `monitoring` would mean
+  inventing one to satisfy a rule — which is how a taxonomy starts describing
+  something other than reality.
+
+Flip to `deny` once real codes are assigned.

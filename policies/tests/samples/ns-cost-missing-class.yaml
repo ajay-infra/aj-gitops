@@ -3,5 +3,5 @@ kind: Namespace
 metadata:
   name: payments
   labels:
-    team: payments-team
+    team: prd-1234
     platform.aj/customer: internal

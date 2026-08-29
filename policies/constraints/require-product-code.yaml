@@ -1,0 +1,34 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RequireProductCode
+metadata:
+  name: require-product-code-on-namespaces
+  annotations:
+    description: >-
+      DRYRUN, deliberately. The estate's namespaces carry team values like
+      "product" and "platform", not product codes — so enforcing this today
+      would reject every one of them. Dryrun reports violations to the audit log
+      without blocking, which is the honest state while the codes are being
+      assigned. Flip to deny once they are.
+spec:
+  # Reports, does not block. See the note above — this is a readiness state,
+  # not a permanent posture.
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - default
+      - gatekeeper-system
+  parameters:
+    # pim/prd + number. Lives here rather than in the template's Rego so that
+    # correcting the format is a one-line edit with no policy change — a wrong
+    # pattern in an enforcing constraint rejects every namespace it matches.
+    pattern: "^(pim|prd)-?[0-9]+$"
+    # Platform and sandbox namespaces are overhead, not a product.
+    appliesToClasses:
+      - product
+      - saas
