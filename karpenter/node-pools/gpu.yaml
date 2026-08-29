@@ -10,6 +10,7 @@ spec:
       labels:
         workload: gpu-inference
         node-pool: gpu
+        platform.aj/tier: app
         nvidia.com/gpu.present: "true"
     spec:
       nodeClassRef:

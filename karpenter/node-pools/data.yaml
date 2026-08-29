@@ -1,0 +1,62 @@
+# data — pods permitted to open connections to Aurora and Valkey.
+#
+# Maps to the `data-access` namespace ("DB proxy, cache adapter services").
+# Nothing else should reach the data subnets.
+#
+# ⚠ CONTRADICTION TO RESOLVE BEFORE THIS IS ENFORCED.
+# Two files in this repo currently disagree about who talks to the database:
+#
+#   namespaces/workload-namespaces.yaml   data-access = "DB proxy, cache adapter services"
+#   karpenter/node-pools/backend.yaml     backend on-demand because of
+#                                         "stateful connections to Aurora/Valkey"
+#
+# If backend connects directly, then `data` is not a tier — it is a capability
+# that backend also has, and the security-group boundary buys nothing. If
+# data-access proxies, backend does not need database reachability at all and
+# the boundary is real.
+#
+# The proxy model is the stronger design and the one this pool assumes: one
+# small, auditable set of pods holds database credentials and network reach, and
+# everything else goes through them. But it is a REAL decision with a cost —
+# an extra hop, and a proxy to operate — and it should be made deliberately
+# rather than inherited from whichever file someone reads first.
+#
+# On-demand only: these pods hold stateful connections, and spot reclamation
+# means dropped transactions.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: data
+spec:
+  template:
+    metadata:
+      labels:
+        workload: data-access
+        node-pool: data
+        platform.aj/tier: data
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: data-access
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+            - m6i.large
+            - m6i.xlarge
+      taints:
+        - key: platform.aj/tier
+          value: data
+          effect: NoSchedule
+  limits:
+    cpu: "32"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m

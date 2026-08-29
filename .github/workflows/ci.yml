@@ -27,6 +27,7 @@ jobs:
             keda/ \
             apisix/ \
             opa/ \
+            network-policies/ \
             external-secrets/ \
             falcon/
         # No cloudability/ directory exists yet — see CLAUDE.md Known TODOs

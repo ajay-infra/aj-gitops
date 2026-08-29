@@ -8,6 +8,7 @@ spec:
       labels:
         workload: backend
         node-pool: backend
+        platform.aj/tier: app
     spec:
       nodeClassRef:
         group: karpenter.k8s.aws

@@ -81,6 +81,11 @@ namespaces/
   platform-namespaces.yaml    # argocd, monitoring, falcon-system, cloudability, arc-runners
   workload-namespaces.yaml    # frontend, backend, llm, search, data-access
 
+network-policies/             # CiliumNetworkPolicy per tier — ALLOW rules only
+  README.md                   #   read before adding default-deny
+  edge.yaml app.yaml          #   platform.aj/tier boundaries
+  data.yaml platform.yaml
+
 apisix/                       # ApisixPluginConfig — gateway plugin bundles
   plugin-config-authz.yaml    #   request-id + opa. NO jwt plugin — see opa/
   plugin-config-ratelimit.yaml#   limit-count; policy: local until Valkey exists
@@ -217,3 +222,63 @@ surface, not two. That is why `with_consumer: true` is set on the `opa` plugin.
 exists yet, and the gateway therefore denies everything. That is the correct
 failure mode and there is a test for it — an empty trust store must never mean
 "trust anyone". If that test is ever deleted, assume the worst.
+
+---
+
+## Network tiering — `platform.aj/tier`
+
+Design: `aj-infra-context/arch/network-tiering.md`. What matters when editing:
+
+| tier | namespaces | reachable from |
+|---|---|---|
+| `edge` | `apisix` | the internet-facing NLB **only** |
+| `platform` | `opa`, `cert-manager`, `external-secrets`, `monitoring`, … | cluster-internal; OPA from `edge` |
+| `app` | `frontend`, `backend`, `llm`, `search` | `edge` only |
+| `data` | `data-access` | `app` only |
+
+### Three mechanisms, not one
+
+Conflating these is where the difficulty comes from:
+
+- **Where a pod runs** — Karpenter NodePools with `platform.aj/tier` labels and taints
+- **What a pod can reach** — `network-policies/`
+- **What a node can reach** — subnet, security group, route table (Terraform)
+
+**Pods never run in public subnets.** All nodes are private; public subnets hold
+the NLB, data subnets hold Aurora and Valkey. Scheduling isolates compute, not
+traffic.
+
+### Why `data` is a tier and not just a label
+
+**Aurora authorizes by security group, and a security group cannot see pods** —
+it sees the node's ENI. So "which pods may open a database connection" is only
+enforceable by controlling which *nodes* carry a trusted security group. A pod
+reaches the database because it was scheduled onto a `data` node, which makes
+database access a reviewable scheduling decision rather than something every pod
+in the cluster has by default.
+
+`network-policies/data.yaml` expresses the intent; the security group enforces it.
+
+### ⚠ Enforcement is NOT on, and the order matters
+
+Cilium has no `policyEnforcementMode` set, so an endpoint is unrestricted until a
+policy selects it. The moment a policy here selects a pod, that pod becomes
+deny-by-default for the direction covered.
+
+```
+label → allow → observe (Hubble) → deny
+```
+
+Reversed, the cluster stops serving and the cause is invisible.
+
+### ⚠ Unresolved contradiction
+
+Two files disagree about who reaches the database:
+
+- `namespaces/workload-namespaces.yaml` — `data-access` is "DB proxy, cache adapter services"
+- `karpenter/node-pools/backend.yaml` — backend is on-demand because of "stateful connections to Aurora/Valkey"
+
+If backend connects directly, `data` is not a tier and the security-group
+boundary buys nothing. If data-access proxies, the boundary is real. The proxy
+model is stronger and is what `data.yaml` assumes — but it costs a hop and a
+proxy to operate, and should be decided rather than inherited.

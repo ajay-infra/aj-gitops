@@ -1,0 +1,62 @@
+# edge — the API gateway tier (APISIX).
+#
+# The only tier the internet-facing NLB targets, and therefore the only ingress
+# point for external traffic.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: tier-edge
+  namespace: apisix
+spec:
+  endpointSelector: {}
+
+  ingress:
+    # From outside the cluster, via the NLB. `world` rather than a CIDR because
+    # the NLB preserves client IPs and those are not knowable in advance.
+    - fromEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "8080"
+              protocol: TCP
+            - port: "8443"
+              protocol: TCP
+
+    # Health checks from the load balancer.
+    - fromEntities:
+        - health
+
+  egress:
+    # The authorization decision. Every request the gateway serves depends on
+    # this call, so it is the single most important egress rule in the estate —
+    # if it is missing, the gateway fails closed and nothing serves.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: opa
+      toPorts:
+        - ports:
+            - port: "8181"
+              protocol: TCP
+
+    # Upstream workloads. `edge` reaches `app`, never `data` directly.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: frontend
+        - matchLabels:
+            io.kubernetes.pod.namespace: backend
+        - matchLabels:
+            io.kubernetes.pod.namespace: llm
+        - matchLabels:
+            io.kubernetes.pod.namespace: search
+
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+          rules:
+            dns:
+              - matchPattern: "*"

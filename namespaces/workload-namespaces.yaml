@@ -6,6 +6,7 @@ metadata:
   name: frontend
   labels:
     app.kubernetes.io/managed-by: argocd
+    platform.aj/tier: app
     team: product
 ---
 # backend — API services, workers
@@ -15,6 +16,7 @@ metadata:
   name: backend
   labels:
     app.kubernetes.io/managed-by: argocd
+    platform.aj/tier: app
     team: product
 ---
 # data-access — DB proxy, cache adapter services
@@ -24,4 +26,5 @@ metadata:
   name: data-access
   labels:
     app.kubernetes.io/managed-by: argocd
+    platform.aj/tier: data
     team: platform

@@ -4,6 +4,24 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Added — network tiering (`platform.aj/tier`)
+Implements `aj-infra-context/arch/network-tiering.md`. **Allow rules only; enforcement is not switched on.**
+
+- **`network-policies/`** — `CiliumNetworkPolicy` per tier. Cilium is installed and, before this, **not one policy existed** — every pod could reach every other pod. Rules key on `io.kubernetes.pod.namespace`, which Cilium adds to every endpoint automatically, so they work without every workload author remembering a label and cannot be bypassed by omitting one.
+  - `platform` is deliberately **not reachable from `app`** — a compromised workload must not have a network path to OPA, External Secrets or cert-manager, which hold the credentials and make the decisions that constrain it. The single exception is OPA from `edge`, which is the authorization call path.
+  - OPA has **no `world` egress**: it must not fetch JWKS over the internet per request. Keys live in policy data.
+- **Karpenter tier pools** — new `edge`, `platform` and `data` NodePools; `platform.aj/tier: app` added to `frontend`, `backend` and `gpu`. Tier and `workload` are separate axes and compose; neither replaces the other.
+- **`karpenter/node-classes/data-access.yaml`** — the reason `data` is a tier rather than a label. **Aurora authorizes by security group and a security group cannot see pods**, only the node's ENI. So database reachability is only enforceable by controlling which nodes carry a trusted group, which makes it a reviewable scheduling decision instead of an ambient property.
+- Namespace `platform.aj/tier` labels on `frontend`, `backend`, `data-access`.
+
+### ⚠ Known-incomplete, deliberately
+- **`karpenter.sh/data-access` security group does not exist.** It needs creating Terraform-side with Aurora's and Valkey's ingress narrowed to reference only it — blocked on `aj-infra-context#24` / `#15`. Until then the `data` pool will not provision, which is the correct failure mode: better a pod that will not schedule than one reaching the database because it landed on a broadly-permitted node.
+- **`data.yaml` egress uses a placeholder `10.0.0.0/8`.** The data VPC does not exist. The /8 is deliberately obvious so it cannot be mistaken for a considered value.
+- **Enforcement order is not optional:** label → allow → observe (Hubble) → `policyEnforcementMode`. Default-deny with incomplete allow rules is an outage whose cause is invisible without Hubble already running.
+
+### ⚠ Contradiction surfaced, not resolved
+`namespaces/workload-namespaces.yaml` calls `data-access` "DB proxy, cache adapter services", while `karpenter/node-pools/backend.yaml` justifies on-demand capacity by backend's "stateful connections to Aurora/Valkey". **Both cannot be true.** If backend connects directly, `data` is not a tier and the security-group boundary buys nothing. Recorded in both files rather than silently picking one.
+
 ### Changed — BREAKING
 - **`kong/` removed; replaced by `apisix/` + `opa/`.** Follows `aj-infra-platform#10`, which swapped Kong for APISIX + standalone OPA. Rationale: `aj-infra-context/arch/gateway-selection.md`.
   - `kong/jwt.yaml` has **no direct replacement, deliberately.** There is no JWT plugin at the gateway any more. Verification moved into OPA (`opa/policy-authz.yaml`), which makes trusted issuers *data* rather than gateway configuration.

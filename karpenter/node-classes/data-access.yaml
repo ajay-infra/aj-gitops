@@ -1,0 +1,55 @@
+# EC2NodeClass for the data tier.
+#
+# This exists for exactly ONE reason, and it is the reason `data` is a tier
+# rather than just a label: **Aurora and Valkey authorize by security group, and
+# a security group cannot see pods.** It sees the ENI on the node.
+#
+# So "which pods may open a database connection" is only enforceable at the AWS
+# layer by controlling which NODES carry a trusted security group. A pod reaches
+# the database because it was scheduled onto a node in this class — which makes
+# database access an explicit, reviewable scheduling decision instead of an
+# ambient property every pod in the cluster shares.
+#
+# ⚠ INCOMPLETE — BLOCKED. `karpenter.sh/data-access` is a tag that nothing
+# creates yet. It needs a dedicated security group, created Terraform-side, with
+# Aurora's and Valkey's ingress rules narrowed to reference ONLY it. That work
+# lands with the data layer: aj-infra-context#24 (Keycloak's database, the first
+# real Aurora consumer) and #15 (no pipeline stage applies the module at all).
+#
+# Until then this NodeClass will not resolve a security group and the data pool
+# cannot provision. That is the correct failure mode: better a pod that will not
+# schedule than a pod that reaches the database because it happened to land on a
+# node with broad security-group membership.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: data-access
+spec:
+  amiSelectorTerms:
+    - alias: al2023@latest
+
+  role: "REPLACE_WITH_CLUSTER_NAME-karpenter-node"
+
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: "REPLACE_WITH_CLUSTER_NAME"
+        kubernetes.io/role/internal-elb: "1"
+
+  # The whole point. NOT the shared discovery tag every other node gets —
+  # a dedicated group that Aurora and Valkey trust and nothing else does.
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/data-access: "REPLACE_WITH_CLUSTER_NAME"
+
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 50Gi
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+
+  metadataOptions:
+    httpEndpoint: enabled
+    httpTokens: required
+    httpPutResponseHopLimit: 1

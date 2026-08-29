@@ -1,0 +1,50 @@
+# platform — cluster add-ons.
+#
+# cert-manager, external-dns, External Secrets, OPA, Karpenter itself, the
+# ArgoCD agent, observability agents.
+#
+# Separated from `app` for one reason above all: these components hold the
+# credentials and make the decisions that constrain workloads. OPA authorizes
+# every API request; ESO reads secrets; cert-manager holds Route53 write access.
+# A compromised workload should not be on the same node as the process deciding
+# whether it is allowed to do things.
+#
+# On-demand: an evicted OPA is a failed authorization decision, and the gateway
+# fails closed.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: platform
+spec:
+  template:
+    metadata:
+      labels:
+        workload: platform
+        node-pool: platform
+        platform.aj/tier: platform
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: general-purpose
+      requirements:
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: ["on-demand"]
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: node.kubernetes.io/instance-type
+          operator: In
+          values:
+            - m6i.large
+            - m6i.xlarge
+      taints:
+        - key: platform.aj/tier
+          value: platform
+          effect: NoSchedule
+  limits:
+    cpu: "32"
+  disruption:
+    consolidationPolicy: WhenEmpty
+    consolidateAfter: 5m
