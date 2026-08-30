@@ -1,0 +1,15 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: DenyLatestTag
+metadata:
+  name: deny-latest-tag-workloads
+spec:
+  # Hard deny in prod namespaces — rollbacks require pinned tags
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    namespaces:
+      - frontend
+      - backend
+      - data-access

@@ -1,0 +1,21 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RequireResourceLimits
+metadata:
+  name: require-resource-limits-all
+spec:
+  # warn: allows but logs violation (gradual rollout)
+  # deny:  hard block (activate for prod once existing workloads are compliant)
+  enforcementAction: warn
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Pod"]
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+      - argocd
+      - falcon-system
+      - karpenter
+      - external-secrets
+      - cert-manager
+      - monitoring

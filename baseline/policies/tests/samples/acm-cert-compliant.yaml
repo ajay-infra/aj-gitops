@@ -1,0 +1,12 @@
+# An ACK ACM Certificate with no exportTo — the normal, free case.
+# The certificate stays in ACM and is discovered by the AWS Load Balancer
+# Controller for TLS termination at the ALB. No private key ever leaves ACM.
+apiVersion: acm.services.k8s.aws/v1alpha1
+kind: Certificate
+metadata:
+  name: platform-cert
+  namespace: frontend
+spec:
+  domainName: app.platform.example.com
+  options:
+    certificateTransparencyLoggingPreference: ENABLED

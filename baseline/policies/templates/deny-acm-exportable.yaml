@@ -1,0 +1,42 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: denyacmexportable
+  annotations:
+    description: >-
+      Block spec.exportTo on ACK ACM Certificate resources. exportTo requests an
+      EXPORTABLE public certificate: $7 per FQDN and $79 per wildcard, charged at
+      issuance AND at every renewal on a 198-day validity — roughly $158/year for
+      one wildcard. Standard ACM certificates are free. The one case exportTo
+      serves, in-cluster TLS termination, is already covered free by cert-manager.
+spec:
+  crd:
+    spec:
+      names:
+        kind: DenyACMExportable
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package denyacmexportable
+
+        # This is admission control rather than an IAM policy on purpose.
+        #
+        # ACM has no IAM condition key for the export option — RequestCertificate
+        # supports only ValidationMethod, DomainNames, KeyAlgorithm,
+        # CertificateTransparencyLogging (deprecated), CertificateAuthority and
+        # CertificateKeyPairOrigin. None of them sees it.
+        #
+        # And the charge lands at ISSUANCE, not at export, so withholding
+        # acm:ExportCertificate stops the private key leaving but does not stop
+        # the bill. Rejecting the resource before it is admitted is the only
+        # control that prevents the spend, because the controller then never
+        # calls RequestCertificate with export enabled.
+
+        violation[{"msg": msg}] {
+          input.review.object.spec.exportTo
+          name := object.get(input.review.object.metadata, "name", "<unnamed>")
+          msg := sprintf(
+            "Certificate '%v' sets spec.exportTo, which requests an EXPORTABLE ACM certificate: $7/FQDN and $79/wildcard at issuance AND every renewal (~$158/year per wildcard). Standard ACM certificates are free. For in-cluster TLS termination use cert-manager, which does this at no cost. See aj-infra-platform/ack.tf.",
+            [name]
+          )
+        }

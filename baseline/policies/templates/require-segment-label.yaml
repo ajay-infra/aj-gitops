@@ -1,0 +1,57 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: requiresegmentlabel
+  annotations:
+    description: >-
+      Require platform.aj/segment on every namespace. The network policies in
+      network-policies/ select on this label, and Cilium leaves an endpoint
+      unrestricted until a policy selects it — so a namespace without the label
+      gets no policy and full connectivity, silently. This constraint is what
+      turns that fail-open into a fail-to-create.
+spec:
+  crd:
+    spec:
+      names:
+        kind: RequireSegmentLabel
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowed:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package requiresegmentlabel
+
+        # Two separate failures, deliberately distinguished — "you forgot a
+        # label" and "that is not a segment" need different fixes, and a single
+        # generic message sends people looking in the wrong place.
+
+        violation[{"msg": msg}] {
+          not input.review.object.metadata.labels["platform.aj/segment"]
+          name := object.get(input.review.object.metadata, "name", "<unnamed>")
+          msg := sprintf(
+            "Namespace '%v' has no platform.aj/segment label. Network policies select on it, and Cilium leaves unselected endpoints UNRESTRICTED — so this namespace would have full connectivity with nothing to indicate it. Set one of: %v",
+            [name, object.get(input.parameters, "allowed", [])]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          seg := input.review.object.metadata.labels["platform.aj/segment"]
+          allowed := object.get(input.parameters, "allowed", [])
+          count(allowed) > 0
+          not seg_allowed(seg, allowed)
+          name := object.get(input.review.object.metadata, "name", "<unnamed>")
+          msg := sprintf(
+            "Namespace '%v' has platform.aj/segment '%v', which is not a known segment. No network policy selects it, so it would be unrestricted. Allowed: %v",
+            [name, seg, allowed]
+          )
+        }
+
+        seg_allowed(seg, allowed) {
+          allowed[_] == seg
+        }

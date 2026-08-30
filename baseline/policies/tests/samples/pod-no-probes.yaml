@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata: {name: bad-probes, namespace: frontend}
+spec:
+  containers:
+    - name: app
+      image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/frontend:v1
+      readinessProbe:
+        httpGet: {path: /ready, port: 8080}

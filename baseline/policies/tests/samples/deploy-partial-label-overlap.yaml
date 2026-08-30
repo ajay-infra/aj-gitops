@@ -1,0 +1,12 @@
+# THE REGRESSION CASE (bug fixed 2026-08-25).
+#
+# This Deployment shares `app: shared` with the PDB below, but differs on
+# `tier`. The PDB does NOT cover it. The old rule used Rego's implicit
+# existential quantification, so ONE matching key was enough — this Deployment
+# was silently treated as protected while having no PDB at all.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: partial-overlap, namespace: frontend}
+spec:
+  selector:
+    matchLabels: {app: shared, tier: worker}

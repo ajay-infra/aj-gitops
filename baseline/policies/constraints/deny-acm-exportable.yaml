@@ -1,0 +1,18 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: DenyACMExportable
+metadata:
+  name: deny-acm-exportable-certificates
+  annotations:
+    description: >-
+      Cluster-wide and unconditional. Unlike the workload constraints, this is not
+      scoped to prod namespaces — an exportable certificate costs the same in dev,
+      and dev is where someone experimenting would reach for exportTo first.
+spec:
+  # Hard deny everywhere. There is no legitimate use of exportTo in this estate:
+  # the only thing it enables is in-cluster TLS termination, which cert-manager
+  # already provides for free.
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["acm.services.k8s.aws"]
+        kinds: ["Certificate"]

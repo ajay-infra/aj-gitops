@@ -1,0 +1,263 @@
+# gator test suite for every OPA Gatekeeper policy in this repo.
+#
+#   gator verify policies/tests/suite.yaml
+#
+# Why this exists
+# ───────────────
+# The six ConstraintTemplates here had no committed tests. A Rego rule that
+# silently matches nothing looks exactly like a rule that finds no violations —
+# and that already happened once: RequirePodDisruptionBudget's subset check used
+# an implicit-existential single-key comparison, so a Deployment with no PDB
+# passed. Fixed 2026-08-26, but nothing stopped it recurring.
+#
+# Each policy is tested in both directions: a compliant object must produce NO
+# violations, and a specific breach must produce one. A suite that only tests
+# the deny path cannot tell a working rule from one that denies everything.
+kind: Suite
+apiVersion: test.gatekeeper.sh/v1alpha1
+metadata:
+  name: platform-policies
+tests:
+  # ── deny :latest ──────────────────────────────────────────────────────────
+  - name: deny-latest-tag
+    template: ../templates/deny-latest-tag.yaml
+    constraint: ../constraints/deny-latest-tag.yaml
+    cases:
+      - name: pinned-semver-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: explicit-latest-is-denied
+        object: samples/pod-latest-tag.yaml
+        assertions: [{violations: yes, message: "latest"}]
+      - name: untagged-image-is-denied
+        # No tag defaults to :latest — a rule checking only endswith(":latest")
+        # would miss this.
+        object: samples/pod-untagged.yaml
+        assertions: [{violations: yes}]
+      - name: latest-in-an-initcontainer-is-denied
+        object: samples/pod-latest-initcontainer.yaml
+        assertions: [{violations: yes, message: "initContainer"}]
+
+  # ── allowed registries ────────────────────────────────────────────────────
+  - name: allowed-registries
+    template: ../templates/allowed-registries.yaml
+    constraint: ../constraints/allowed-registries.yaml
+    cases:
+      - name: ecr-prefix-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: docker-hub-is-denied
+        object: samples/pod-foreign-registry.yaml
+        assertions: [{violations: yes, message: "disallowed registry"}]
+      - name: excluded-namespace-is-not-evaluated
+        object: samples/pod-kube-system.yaml
+        assertions: [{violations: no}]
+
+  # ── privileged / host namespaces ──────────────────────────────────────────
+  - name: no-privileged-containers
+    template: ../templates/no-privileged-containers.yaml
+    constraint: ../constraints/no-privileged-containers.yaml
+    cases:
+      - name: unprivileged-pod-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: privileged-container-is-denied
+        object: samples/pod-privileged.yaml
+        assertions: [{violations: yes}]
+      - name: host-network-is-denied
+        # Pod-level escape, not a container securityContext — a rule that only
+        # walks containers[_] would pass this.
+        object: samples/pod-host-namespace.yaml
+        assertions: [{violations: yes}]
+      - name: falcon-and-system-namespaces-are-excluded
+        object: samples/pod-kube-system.yaml
+        assertions: [{violations: no}]
+
+  # ── probes ────────────────────────────────────────────────────────────────
+  - name: require-probes
+    template: ../templates/require-probes.yaml
+    constraint: ../constraints/require-probes.yaml
+    cases:
+      - name: both-probes-present-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: missing-liveness-probe-is-denied
+        # readinessProbe IS set — proves the two branches are independent.
+        object: samples/pod-no-probes.yaml
+        assertions: [{violations: yes, message: "livenessProbe"}]
+
+  # ── resource limits ───────────────────────────────────────────────────────
+  - name: require-resource-limits
+    template: ../templates/require-resource-limits.yaml
+    constraint: ../constraints/require-resource-limits.yaml
+    cases:
+      - name: requests-and-limits-present-is-allowed
+        object: samples/pod-compliant.yaml
+        assertions: [{violations: no}]
+      - name: requests-without-limits-is-denied
+        object: samples/pod-no-limits.yaml
+        assertions: [{violations: yes}]
+
+  # ── PDB coverage (referential — reads cluster state via data.inventory) ────
+  - name: require-pod-disruption-budget
+    template: ../templates/require-pod-disruption-budget.yaml
+    constraint: ../constraints/require-pod-disruption-budget.yaml
+    cases:
+      - name: deployment-with-a-matching-pdb-is-allowed
+        object: samples/deploy-with-pdb.yaml
+        inventory: [samples/inventory-pdb.yaml]
+        assertions: [{violations: no}]
+
+      - name: deployment-with-no-pdb-at-all-is-denied
+        object: samples/deploy-without-pdb.yaml
+        inventory: [samples/inventory-pdb.yaml]
+        assertions: [{violations: yes, message: "PodDisruptionBudget"}]
+
+      - name: partial-label-overlap-does-not-count-as-covered
+        # The 2026-08-25 regression: shares `app: shared` with the PDB but
+        # differs on `tier`. The old implicit-existential subset check treated
+        # one matching key as full coverage, so this unprotected Deployment
+        # passed silently.
+        object: samples/deploy-partial-label-overlap.yaml
+        inventory: [samples/inventory-pdb.yaml]
+        assertions: [{violations: yes, message: "PodDisruptionBudget"}]
+
+  # ── deny exportable ACM certificates ──────────────────────────────────────
+  # Tested in both directions specifically because the deny path here is cheap
+  # to get wrong in a way that looks fine: a rule matching the wrong field, or
+  # the wrong apiGroup, denies nothing and there is no bill until someone tries
+  # it. The compliant case must pass, or the constraint would block every
+  # certificate and the estate would quietly stop issuing any.
+  - name: deny-acm-exportable
+    template: ../templates/deny-acm-exportable.yaml
+    constraint: ../constraints/deny-acm-exportable.yaml
+    cases:
+      - name: certificate-without-exportto-is-allowed
+        object: samples/acm-cert-compliant.yaml
+        assertions: [{violations: no}]
+      - name: exportto-is-denied
+        object: samples/acm-cert-exportable.yaml
+        assertions: [{violations: yes, message: "exportTo"}]
+      - name: wildcard-exportto-is-denied
+        object: samples/acm-cert-wildcard-exportable.yaml
+        assertions: [{violations: yes, message: "158"}]
+
+  # ── require a network segment on every namespace ──────────────────────────
+  # The deny cases matter because the failure they prevent is invisible: a
+  # namespace without this label gets no CiliumNetworkPolicy, and Cilium leaves
+  # unselected endpoints unrestricted. Nothing errors; the namespace is simply
+  # open.
+  - name: require-segment-label
+    template: ../templates/require-segment-label.yaml
+    constraint: ../constraints/require-segment-label.yaml
+    cases:
+      - name: labelled-namespace-is-allowed
+        object: samples/ns-segment-compliant.yaml
+        assertions: [{violations: no}]
+      - name: missing-label-is-denied
+        object: samples/ns-segment-missing.yaml
+        assertions: [{violations: yes, message: "no platform.aj/segment label"}]
+      - name: a-terraform-declared-platform-namespace-is-admissible
+        # The regression this repo and aj-infra-platform now share: platform
+        # namespaces were Helm-created and unlabelled, so this constraint would
+        # have rejected all nine of them. If the label set in namespaces.tf and
+        # the one required here ever diverge, the platform stops installing —
+        # this case is where that shows up.
+        object: samples/ns-platform-terraform.yaml
+        assertions: [{violations: no}]
+      - name: unknown-segment-is-denied
+        object: samples/ns-segment-unknown.yaml
+        assertions: [{violations: yes, message: "not a known segment"}]
+
+  # ── require cost-attribution labels ───────────────────────────────────────
+  # The failure these prevent is not an outage — it is a bill nobody can split.
+  # Silent, and only discovered when someone asks whether a customer is
+  # profitable and finds the data was never collected.
+  - name: require-cost-labels
+    template: ../templates/require-cost-labels.yaml
+    constraint: ../constraints/require-cost-labels.yaml
+    cases:
+      - name: fully-labelled-namespace-is-allowed
+        object: samples/ns-cost-compliant.yaml
+        assertions: [{violations: no}]
+      - name: dedicated-customer-namespace-is-allowed
+        object: samples/ns-cost-dedicated-customer.yaml
+        assertions: [{violations: no}]
+      - name: a-terraform-declared-platform-namespace-is-admissible
+        # The regression this repo and aj-infra-platform now share: platform
+        # namespaces were Helm-created and unlabelled, so this constraint would
+        # have rejected all nine of them. If the label set in namespaces.tf and
+        # the one required here ever diverge, the platform stops installing —
+        # this case is where that shows up.
+        object: samples/ns-platform-terraform.yaml
+        assertions: [{violations: no}]
+      - name: missing-class-is-denied
+        object: samples/ns-cost-missing-class.yaml
+        assertions: [{violations: yes, message: "platform.aj/class"}]
+      - name: empty-customer-is-denied
+        object: samples/ns-cost-empty-customer.yaml
+        assertions: [{violations: yes, message: "cannot be distinguished from a forgotten one"}]
+
+  # ── product code on the team label ────────────────────────────────────────
+  # Ships in dryrun: the estate's namespaces carry "product" and "platform",
+  # not product codes, so enforcing today would reject every one. The tests
+  # still assert the rule is CORRECT — dryrun changes whether a violation
+  # blocks, not whether it is detected.
+  - name: require-product-code
+    template: ../templates/require-product-code.yaml
+    constraint: ../constraints/require-product-code.yaml
+    cases:
+      - name: product-code-is-allowed
+        object: samples/ns-cost-compliant.yaml
+        assertions: [{violations: no}]
+      - name: descriptive-slug-on-a-product-namespace-is-flagged
+        object: samples/ns-cost-bad-team.yaml
+        assertions: [{violations: yes, message: "not a product code"}]
+      - name: platform-namespace-needs-no-product-code
+        object: samples/ns-platform-owned.yaml
+        assertions: [{violations: no}]
+      - name: saas-namespace-is-out-of-scope
+        object: samples/ns-saas-no-product-code.yaml
+        assertions: [{violations: no}]
+
+
+  # ── product line on SaaS namespaces ───────────────────────────────────────
+  # Ships in dryrun for a different reason to require-product-code: that one
+  # matches namespaces whose values are wrong, this one matches NO namespace at
+  # all, because nothing in the estate is labelled platform.aj/class: saas yet.
+  #
+  # Which is exactly the case these assertions have to cover. A constraint that
+  # selects nothing and a constraint that finds nothing wrong are identical from
+  # the outside — the RequirePodDisruptionBudget bug in the header was that
+  # failure exactly. The scope cases below are what tell them apart.
+  - name: require-product-line
+    template: ../templates/require-product-line.yaml
+    constraint: ../constraints/require-product-line.yaml
+    cases:
+      - name: registered-line-is-allowed
+        object: samples/ns-saas-line-compliant.yaml
+        assertions: [{violations: no}]
+      - name: shared-is-a-valid-answer
+        # Cross-cutting infrastructure. Reserved so that absent keeps meaning
+        # forgotten — the same design as `pooled` on platform.aj/customer.
+        object: samples/ns-saas-line-shared.yaml
+        assertions: [{violations: no}]
+      - name: saas-without-a-line-is-flagged
+        object: samples/ns-saas-missing-line.yaml
+        assertions: [{violations: yes, message: "no 'platform.aj/product-line' label"}]
+      - name: unregistered-line-is-flagged
+        object: samples/ns-saas-unknown-line.yaml
+        assertions: [{violations: yes, message: "not a product line"}]
+      - name: empty-line-is-flagged
+        # The key exists, so the missing-label rule cannot fire. If the
+        # vocabulary check did not catch it, "" would pass silently.
+        object: samples/ns-saas-empty-line.yaml
+        assertions: [{violations: yes, message: "not a product line"}]
+      - name: product-namespace-is-out-of-scope
+        # Product's chargeback key is the product code on `team`. This asserts
+        # the constraint is SCOPED, not merely quiet.
+        object: samples/ns-cost-compliant.yaml
+        assertions: [{violations: no}]
+      - name: platform-namespace-is-out-of-scope
+        object: samples/ns-platform-owned.yaml
+        assertions: [{violations: no}]

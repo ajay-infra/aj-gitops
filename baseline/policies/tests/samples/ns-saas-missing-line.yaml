@@ -1,0 +1,11 @@
+# SaaS, fully labelled for require-cost-labels, and still unattributable to a
+# product line. This is the gap the constraint exists for: customer alone
+# answers who pays and says nothing about which line the margin belongs to.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acme-prod
+  labels:
+    team: saas-platform
+    platform.aj/class: saas
+    platform.aj/customer: acme-corp

@@ -1,0 +1,39 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: noprivilegedcontainers
+  annotations:
+    description: "Block privileged containers, hostPID, hostNetwork, and hostIPC. Exceptions only via namespace exclusion (e.g. falcon-system)."
+spec:
+  crd:
+    spec:
+      names:
+        kind: NoPrivilegedContainers
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package noprivilegedcontainers
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          container.securityContext.privileged == true
+          msg := sprintf("Container '%v' must not be privileged. Remove securityContext.privileged: true.", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          container.securityContext.privileged == true
+          msg := sprintf("initContainer '%v' must not be privileged.", [container.name])
+        }
+
+        violation[{"msg": "Pods must not use hostPID: true"}] {
+          input.review.object.spec.hostPID == true
+        }
+
+        violation[{"msg": "Pods must not use hostNetwork: true"}] {
+          input.review.object.spec.hostNetwork == true
+        }
+
+        violation[{"msg": "Pods must not use hostIPC: true"}] {
+          input.review.object.spec.hostIPC == true
+        }

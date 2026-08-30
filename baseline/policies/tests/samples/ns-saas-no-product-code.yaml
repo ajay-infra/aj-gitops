@@ -1,0 +1,16 @@
+# A SaaS namespace with no product code. Must NOT be flagged: SaaS is a separate
+# tagging profile whose chargeback key is likely `customer`, and a per-customer
+# deployment may have no product code at all.
+#
+# This case exists because the constraint originally included `saas` in
+# appliesToClasses, which would have forced product's schema onto a stack that
+# does not use it — satisfiable with meaningless values, so the tags look
+# complete while the cost data is useless.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acme-prod
+  labels:
+    team: saas-platform
+    platform.aj/class: saas
+    platform.aj/customer: acme-corp

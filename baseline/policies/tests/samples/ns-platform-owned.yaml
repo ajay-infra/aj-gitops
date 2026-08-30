@@ -1,0 +1,10 @@
+# Platform overhead, not a product. Forcing a product code here would invent one
+# purely to satisfy a rule, which is how taxonomies start lying.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    team: platform
+    platform.aj/class: platform
+    platform.aj/customer: internal

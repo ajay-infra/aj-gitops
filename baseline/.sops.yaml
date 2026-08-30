@@ -1,0 +1,16 @@
+# SOPS key mapping — maps file path patterns to KMS key ARNs per environment.
+# KMS key ARNs come from aj-tf-module-scps outputs (sops_kms_key_arns).
+# Run `sops -e -i <file>` to encrypt; ArgoCD ksops plugin decrypts at render time.
+#
+# NEVER commit plaintext secrets. Encrypt with SOPS before committing.
+# Add *.dec.yaml to .gitignore to prevent accidental plaintext commits.
+
+creation_rules:
+  - path_regex: envs/dev/.*\.yaml
+    kms: arn:aws:kms:us-east-1:REPLACE_WITH_DEV_ACCOUNT:key/REPLACE_WITH_DEV_SOPS_KEY_ID
+
+  - path_regex: envs/staging/.*\.yaml
+    kms: arn:aws:kms:us-east-1:REPLACE_WITH_STAGING_ACCOUNT:key/REPLACE_WITH_STAGING_SOPS_KEY_ID
+
+  - path_regex: envs/prod/.*\.yaml
+    kms: arn:aws:kms:us-east-1:REPLACE_WITH_PROD_ACCOUNT:key/REPLACE_WITH_PROD_SOPS_KEY_ID

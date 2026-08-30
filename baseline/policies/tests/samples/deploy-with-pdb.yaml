@@ -1,0 +1,6 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: covered, namespace: frontend}
+spec:
+  selector:
+    matchLabels: {app: shared, tier: web}

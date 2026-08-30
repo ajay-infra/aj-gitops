@@ -1,0 +1,14 @@
+# SOPS — never commit decrypted files
+*.dec.yaml
+*.dec.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

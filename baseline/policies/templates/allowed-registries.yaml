@@ -1,0 +1,46 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: allowedregistries
+  annotations:
+    description: "Images must be pulled from the ECR base URL only. One entry covers private repos + all pull-through cache prefixes (dockerhub/, quay/, ghcr/, k8s/, ecr-public/)."
+spec:
+  crd:
+    spec:
+      names:
+        kind: AllowedRegistries
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            allowedPrefixes:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package allowedregistries
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not registry_allowed(container.image)
+          msg := sprintf(
+            "Container '%v' uses image '%v' from a disallowed registry. Images must be pulled via ECR pull-through cache (AssignImage mutation rewrites image refs automatically).",
+            [container.name, container.image]
+          )
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.initContainers[_]
+          not registry_allowed(container.image)
+          msg := sprintf(
+            "initContainer '%v' uses image '%v' from a disallowed registry.",
+            [container.name, container.image]
+          )
+        }
+
+        registry_allowed(image) {
+          prefix := input.parameters.allowedPrefixes[_]
+          startswith(image, prefix)
+        }

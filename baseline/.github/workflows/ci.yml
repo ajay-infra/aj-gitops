@@ -1,0 +1,197 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+
+# Uncomment to enable automatic CI on push/PR
+# on:
+#   push:
+#     branches: [main]
+
+jobs:
+  yaml-lint:
+    name: YAML lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install yamllint
+        run: pip install yamllint
+      - name: Lint all YAML
+        run: |
+          yamllint \
+            policies/ \
+            karpenter/ \
+            keda/ \
+            apisix/ \
+            opa/ \
+            network-policies/ \
+            external-secrets/ \
+            falcon/
+        # No cloudability/ directory exists yet — see CLAUDE.md Known TODOs
+        # ("Add Cloudability agent manifest (or confirm it is fully handled by the
+        # ApplicationSet Helm install)"). Add it back to this list if that manifest
+        # ever lands here.
+
+  validate-k8s:
+    name: Validate Kubernetes manifests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar xz && mv kubeconform /usr/local/bin/
+      - name: Validate native K8s resources
+        run: |
+          kubeconform \
+            -schema-location default \
+            -ignore-missing-schemas \
+            -summary \
+            -kubernetes-version 1.35.0 \
+            falcon/
+        # OPA, Karpenter, KEDA, Kong CRDs are not in the default schema —
+        # -ignore-missing-schemas skips them; yamllint catches syntax errors.
+        # No cloudability/ directory exists yet — see CLAUDE.md Known TODOs.
+
+  validate-opa:
+    name: Validate OPA Rego
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OPA
+        run: |
+          curl -sL https://openpolicyagent.org/downloads/v0.70.0/opa_linux_amd64_static \
+            -o /usr/local/bin/opa && chmod +x /usr/local/bin/opa
+      - name: Lint Rego policies
+        run: |
+          for template in policies/templates/*.yaml; do
+            echo "Checking $template"
+            # Extract and validate Rego blocks
+            python3 -c "
+          import yaml, sys
+          with open('$template') as f:
+              doc = yaml.safe_load(f)
+          targets = doc.get('spec', {}).get('targets', [])
+          for t in targets:
+              rego = t.get('rego', '')
+              if rego:
+                  with open('/tmp/policy.rego', 'w') as out:
+                      out.write(rego)
+          "
+            if [ -f /tmp/policy.rego ]; then
+              opa check /tmp/policy.rego && echo "  ✓ Rego valid"
+            fi
+          done
+
+  apisix-authz-tests:
+    name: APISIX authz policy tests (opa test)
+    runs-on: ubuntu-latest
+    # `opa check` proves the policy compiles. These prove it BEHAVES: that an
+    # unsigned token is rejected, that a wrong issuer or audience is rejected,
+    # and — the one that matters most — that an EMPTY issuer list denies rather
+    # than default-allows. All three fail open if got wrong, and all three are
+    # one typo away.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OPA
+        run: |
+          curl -sL https://openpolicyagent.org/downloads/v0.70.0/opa_linux_amd64_static \
+            -o /usr/local/bin/opa && chmod +x /usr/local/bin/opa
+      - name: Extract Rego from policy ConfigMaps
+        run: |
+          mkdir -p /tmp/rego
+          python3 - <<'EOF'
+          import yaml, glob, os
+          for f in glob.glob('opa/*.yaml'):
+              doc = yaml.safe_load(open(f))
+              for name, body in (doc.get('data') or {}).items():
+                  if name.endswith('.rego'):
+                      open(os.path.join('/tmp/rego', name), 'w').write(body)
+                      print('extracted', name, 'from', f)
+          EOF
+          cp opa/tests/*.rego /tmp/rego/
+      - name: opa check
+        run: opa check /tmp/rego
+      - name: opa test
+        run: opa test /tmp/rego -v
+
+  policy-tests:
+    name: OPA policy behaviour tests (gator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gator
+        run: |
+          curl -sL https://github.com/open-policy-agent/gatekeeper/releases/download/v3.17.1/gator-v3.17.1-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin gator
+          gator version
+      - name: Verify policy suites
+        # `validate-opa` above only proves the Rego PARSES. This proves it does
+        # what it claims: each policy is tested in both directions, so a rule
+        # that silently matches nothing fails here instead of looking clean.
+        #
+        # Includes a named regression case for the 2026-08-25 bug where
+        # RequirePodDisruptionBudget's implicit-existential subset check treated
+        # one shared label as full PDB coverage, letting an unprotected
+        # Deployment through.
+        run: gator verify policies/tests/suite.yaml
+
+  registry-namespaces:
+    name: Every real namespace against these constraints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The other half of the loop. aj-namespace-registry's CI already renders
+      # its namespaces against the constraints in THIS repo at HEAD — so a bad
+      # registry entry fails there. Nothing caught the reverse: tightening a
+      # constraint here could reject every namespace in the estate, and the
+      # first sign of it would be a cluster refusing to create namespaces.
+      #
+      # The gator suite above tests policies against FIXTURES. This tests them
+      # against the real namespaces, which is a different question.
+      # GH_MODULES_TOKEN does not exist in any repo in this org yet, so this
+      # check CANNOT run today. It skips rather than fails — but it skips
+      # LOUDLY, with a warning annotation on the PR and a final step that says
+      # NOT VERIFIED. A cross-repo check that quietly passes when it never ran
+      # is worse than no check: it is the same shape as every bug this pair of
+      # repos exists to prevent.
+      - name: Is the cross-repo token available?
+        id: tok
+        run: |
+          if [ -n "${{ secrets.GH_MODULES_TOKEN }}" ]; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Cross-repo policy check SKIPPED::GH_MODULES_TOKEN is not set, so aj-namespace-registry could not be checked out. Namespaces were NOT evaluated against policy in this run."
+          fi
+
+      - name: Checkout aj-namespace-registry
+        uses: actions/checkout@v4
+        if: steps.tok.outputs.have == 'true'
+        with:
+          repository: ajay-infra/aj-namespace-registry
+          path: aj-namespace-registry
+          token: ${{ secrets.GH_MODULES_TOKEN }}
+
+      - uses: azure/setup-helm@v4
+        if: steps.tok.outputs.have == 'true'
+
+      - name: Install gator
+        if: steps.tok.outputs.have == 'true'
+        run: |
+          curl -sL https://github.com/open-policy-agent/gatekeeper/releases/download/v3.17.1/gator-v3.17.1-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin gator
+
+      - name: Render every namespace and evaluate it
+        if: steps.tok.outputs.have == 'true'
+        working-directory: aj-namespace-registry
+        run: python3 scripts/validate.py ..
+
+      - name: Say so if it did not run
+        if: steps.tok.outputs.have != 'true'
+        run: |
+          echo "NOT VERIFIED — GH_MODULES_TOKEN is unset, so no namespace was"
+          echo "evaluated against policy in this run. Set the secret to enable it."

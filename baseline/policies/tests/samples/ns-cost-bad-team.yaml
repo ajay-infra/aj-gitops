@@ -1,0 +1,10 @@
+# A descriptive slug where a product code belongs. Chargeback groups by this
+# field, so "payments-team" leaves the spend unattributable to a product.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+  labels:
+    team: payments-team
+    platform.aj/class: product
+    platform.aj/customer: internal
