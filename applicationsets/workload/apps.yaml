@@ -30,23 +30,23 @@ spec:
               elements:
                 - component: frontend
                   namespace: frontend
-                  path: "apps/frontend"
+                  path: "baseline/apps/frontend"
 
                 - component: backend
                   namespace: backend
-                  path: "apps/backend"
+                  path: "baseline/apps/backend"
 
                 - component: llm-router
                   namespace: llm
-                  path: "apps/llm-router"
+                  path: "baseline/apps/llm-router"
 
                 - component: searxng
                   namespace: search
-                  path: "apps/searxng"
+                  path: "baseline/apps/searxng"
 
                 - component: rag-worker
                   namespace: backend
-                  path: "apps/rag-worker"
+                  path: "baseline/apps/rag-worker"
 
   template:
     metadata:
@@ -60,7 +60,7 @@ spec:
       project: workloads
 
       source:
-        repoURL: https://github.com/ajay-infra/aj-cluster-baseline
+        repoURL: https://github.com/ajay-infra/aj-gitops
         targetRevision: v1.0.0
         path: "{{path}}/overlays/{{values.env}}"
 

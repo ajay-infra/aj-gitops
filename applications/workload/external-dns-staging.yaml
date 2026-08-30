@@ -26,7 +26,7 @@ spec:
         valueFiles:
           - $values/charts/external-dns/values/staging.yaml
 
-    - repoURL: https://github.com/ajay-infra/aj-platform-gitops
+    - repoURL: https://github.com/ajay-infra/aj-gitops
       targetRevision: v1.0.0
       ref: values
 

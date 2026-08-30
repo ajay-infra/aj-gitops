@@ -16,7 +16,7 @@ spec:
 
   sourceRepos:
     - https://github.com/ajay-infra/aj-cluster-baseline
-    - https://github.com/ajay-infra/aj-platform-gitops
+    - https://github.com/ajay-infra/aj-gitops
 
   destinations:
     # dev + staging workload clusters

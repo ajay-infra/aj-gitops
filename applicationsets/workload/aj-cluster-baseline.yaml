@@ -39,8 +39,13 @@ spec:
       project: workloads
 
       source:
-        repoURL:        https://github.com/ajay-infra/aj-cluster-baseline
+        repoURL:        https://github.com/ajay-infra/aj-gitops
         targetRevision: v1.0.0
+        # The baseline is a DIRECTORY in aj-gitops now, not a repo. Without
+        # this path the sync would recurse the entire monorepo — including
+        # every ApplicationSet, which ArgoCD would then try to apply to a
+        # workload cluster.
+        path: baseline
         directory:
           recurse: true   # deploy all YAML files in all subdirectories
           # ...except the policy test fixtures, which are REAL manifests that

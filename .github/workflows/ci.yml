@@ -1,126 +1,103 @@
+---
+# One CI for the whole GitOps repo.
+#
+# Replaced three near-identical workflows — one per absorbed repo — that each
+# installed the same tools to run the same checks. The two nested .github
+# directories were inert anyway: GitHub reads only the root one.
 name: CI
 
 on:
-  workflow_dispatch:
   pull_request:
+  push:
     branches: [main]
 
-# Uncomment to enable CI on direct push to main (after branch protection is solid)
-# on:
-#   push:
-#     branches: [main]
-
 jobs:
-  helm-lint:
-    name: Helm lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: azure/setup-helm@v4
-        with:
-          version: "3.16.3"
-
-      - name: Add chart repos
-        run: |
-          helm repo add argo    https://argoproj.github.io/argo-helm
-          helm repo add grafana https://grafana.github.io/helm-charts
-          helm repo update
-
-      # helm lint only works on local chart directories.
-      # For remote charts, use helm template (renders + validates values) and discard output.
-      - name: Validate ArgoCD values
-        run: |
-          helm template argocd argo/argo-cd --version 7.7.11 --values charts/argocd/values/nonprod.yaml > /dev/null
-          helm template argocd argo/argo-cd --version 7.7.11 --values charts/argocd/values/prod.yaml > /dev/null
-
-      - name: Validate Grafana values
-        run: |
-          helm template grafana grafana/grafana --version 8.8.4 --values charts/grafana/values/nonprod.yaml > /dev/null
-          helm template grafana grafana/grafana --version 8.8.4 --values charts/grafana/values/prod.yaml > /dev/null
-
-      - name: Validate Loki values
-        run: |
-          helm template loki grafana/loki --version 6.24.0 --values charts/loki/values/nonprod.yaml > /dev/null
-          helm template loki grafana/loki --version 6.24.0 --values charts/loki/values/prod.yaml > /dev/null
-
-      - name: Validate Mimir values
-        run: |
-          helm template mimir grafana/mimir-distributed --version 5.5.1 --values charts/mimir/values/nonprod.yaml > /dev/null
-          helm template mimir grafana/mimir-distributed --version 5.5.1 --values charts/mimir/values/prod.yaml > /dev/null
-
-      - name: Validate Tempo values
-        run: |
-          helm template tempo grafana/tempo --version 1.14.0 --values charts/tempo/values/nonprod.yaml > /dev/null
-          helm template tempo grafana/tempo --version 1.14.0 --values charts/tempo/values/prod.yaml > /dev/null
-
-      - name: Validate Argo Rollouts values
-        run: |
-          helm template argo-rollouts argo/argo-rollouts --version 2.38.0 --values charts/argo-rollouts/values/dev.yaml > /dev/null
-          helm template argo-rollouts argo/argo-rollouts --version 2.38.0 --values charts/argo-rollouts/values/staging.yaml > /dev/null
-          helm template argo-rollouts argo/argo-rollouts --version 2.38.0 --values charts/argo-rollouts/values/prod.yaml > /dev/null
-
-      - name: Validate k8s-monitoring values
-        run: |
-          helm template k8s-monitoring grafana/k8s-monitoring --version 2.0.2 --values charts/k8s-monitoring/values/dev.yaml > /dev/null
-          helm template k8s-monitoring grafana/k8s-monitoring --version 2.0.2 --values charts/k8s-monitoring/values/staging.yaml > /dev/null
-          helm template k8s-monitoring grafana/k8s-monitoring --version 2.0.2 --values charts/k8s-monitoring/values/prod.yaml > /dev/null
-
   yaml-lint:
     name: YAML lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install yamllint
-        run: pip install yamllint
-      - name: Lint YAML
-        run: yamllint applicationsets/ bootstrap/ projects/ charts/
+      - run: pip install yamllint
+      - name: Lint
+        # chart templates are Go templates, not YAML — helm lint checks those.
+        run: |
+          yamllint applicationsets/ bootstrap/ projects/ charts/ \
+                   baseline/ namespaces/registry/ \
+                   namespaces/chart/Chart.yaml namespaces/chart/values.yaml
 
-  validate-appsets:
-    name: Validate ApplicationSets
+  helm-lint:
+    name: Helm lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: The namespace chart
+        run: |
+          helm lint namespaces/chart \
+            --set namespace=lint --set identity.team=t --set identity.class=product \
+            --set identity.customer=internal --set identity.segment=app \
+            --set guardrails.quota=small
+
+  validate-manifests:
+    name: Validate Kubernetes manifests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Install kubeconform
         run: |
           curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
-            | tar xz && mv kubeconform /usr/local/bin/
-      - name: Validate manifests
+            | tar xz && sudo mv kubeconform /usr/local/bin/
+      - name: ApplicationSets, projects, bootstrap and baseline
+        # -ignore-missing-schemas skips CRDs not in the default schema set
+        # (ApplicationSet, AppProject, CiliumNetworkPolicy, NodePool, …).
         run: |
-          kubeconform \
-            -schema-location default \
-            -ignore-missing-schemas \
-            -summary \
-            applicationsets/**/*.yaml bootstrap/*.yaml projects/*.yaml
-          # Note: -ignore-missing-schemas skips ArgoCD CRDs (ApplicationSet, AppProject)
-          # since their template variables (e.g. prune: "{{autoSync}}") don't pass
-          # strict boolean type checks in external schema catalogs.
+          kubeconform -schema-location default -ignore-missing-schemas -summary \
+            applicationsets/**/*.yaml bootstrap/*.yaml projects/*.yaml \
+            baseline/falcon/
 
-# ── COMMENTED OUT — PR-only diff, re-enable when auto CI is turned on ────────
-#
-# helm-diff:
-#   name: Helm template diff (informational)
-#   runs-on: ubuntu-latest
-#   if: github.event_name == 'pull_request'
-#   steps:
-#     - uses: actions/checkout@v4
-#       with:
-#         fetch-depth: 0
-#     - uses: azure/setup-helm@v4
-#       with:
-#         version: "3.16.3"
-#     - name: Add chart repos
-#       run: |
-#         helm repo add argo    https://argoproj.github.io/argo-helm
-#         helm repo add grafana https://grafana.github.io/helm-charts
-#         helm repo update
-#     - name: Template nonprod stack (line count summary)
-#       run: |
-#         echo "=== ArgoCD ===" && helm template argocd argo/argo-cd --version 7.7.11 \
-#           --values charts/argocd/values/nonprod.yaml | wc -l
-#         echo "=== Loki ===" && helm template loki grafana/loki --version 6.24.0 \
-#           --values charts/loki/values/nonprod.yaml | wc -l
-#         echo "=== Mimir ===" && helm template mimir grafana/mimir-distributed --version 5.5.1 \
-#           --values charts/mimir/values/nonprod.yaml | wc -l
-#         echo "=== Tempo ===" && helm template tempo grafana/tempo --version 1.14.0 \
-#           --values charts/tempo/values/nonprod.yaml | wc -l
+  policy:
+    name: Policy — gator, rego, and every real namespace
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+
+      - name: Install gator and opa
+        run: |
+          curl -sL https://github.com/open-policy-agent/gatekeeper/releases/download/v3.17.1/gator-v3.17.1-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin gator
+          curl -sL -o /usr/local/bin/opa https://openpolicyagent.org/downloads/v0.68.0/opa_linux_amd64_static
+          chmod +x /usr/local/bin/opa
+
+      - name: Gatekeeper policies behave as claimed
+        run: gator verify baseline/policies/tests/suite.yaml
+
+      # `opa check` proves the policy compiles. These prove it BEHAVES: that an
+      # unsigned token is rejected, that a wrong issuer or audience is rejected,
+      # and — the one that matters most — that an EMPTY issuer list denies
+      # rather than default-allows. All three fail open if got wrong.
+      #
+      # The Rego lives inside ConfigMaps, so it has to be extracted before it
+      # can be tested. `opa test baseline/opa/` reads the YAML and fails.
+      - name: Extract Rego from the policy ConfigMaps
+        run: |
+          mkdir -p /tmp/rego
+          python3 - <<'PYEOF'
+          import yaml, glob, os
+          for f in glob.glob('baseline/opa/*.yaml'):
+              doc = yaml.safe_load(open(f))
+              for name, body in (doc.get('data') or {}).items():
+                  if name.endswith('.rego'):
+                      open(os.path.join('/tmp/rego', name), 'w').write(body)
+                      print('extracted', name, 'from', f)
+          PYEOF
+          cp baseline/opa/tests/*.rego /tmp/rego/
+
+      - name: APISIX authz policy behaves
+        run: opa test /tmp/rego -v
+
+      - name: Every real namespace against the live constraints
+        # The check that could NOT run before consolidation: it had to read the
+        # constraints from another private repo, and GH_MODULES_TOKEN does not
+        # exist in this org. Both halves are in this repo now, so it just runs.
+        run: python3 namespaces/scripts/validate.py baseline

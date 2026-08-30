@@ -10,7 +10,11 @@ sample had to be hand-written to pin the two repos together.
 Now every namespace in the estate is checked against the live policy on every
 PR, rather than one representative sample.
 
-  Usage: scripts/validate.py [path-to-aj-cluster-baseline]
+  Usage: namespaces/scripts/validate.py [path-to-baseline]
+
+Since consolidation this reads the constraints from ../baseline in the SAME
+repo, so it needs no cross-repo checkout and no credential — the check that
+could not run in CI now simply runs.
 """
 import re
 import shutil
@@ -45,7 +49,7 @@ def enforcement_actions(constraints_dir: Path) -> dict:
 
 
 def main() -> int:
-    baseline = Path(sys.argv[1] if len(sys.argv) > 1 else HERE.parent / "aj-cluster-baseline")
+    baseline = Path(sys.argv[1] if len(sys.argv) > 1 else HERE.parent / "baseline")
     policies = baseline / "policies"
     if not policies.is_dir():
         print(f"no policies/ under {baseline}")
