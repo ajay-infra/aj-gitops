@@ -36,19 +36,45 @@ jobs:
       # The constraints are NOT vendored here. Vendoring them would create a
       # second copy that drifts from the enforcing one, which is the failure
       # this repo exists to remove — so CI reads the real thing at HEAD.
+      # GH_MODULES_TOKEN does not exist in any repo in this org yet, so this
+      # check CANNOT run today. It skips rather than fails — but it skips
+      # LOUDLY, with a warning annotation on the PR and a final step that says
+      # NOT VERIFIED. A cross-repo check that quietly passes when it never ran
+      # is worse than no check: it is the same shape as every bug this pair of
+      # repos exists to prevent.
+      - name: Is the cross-repo token available?
+        id: tok
+        run: |
+          if [ -n "${{ secrets.GH_MODULES_TOKEN }}" ]; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Cross-repo policy check SKIPPED::GH_MODULES_TOKEN is not set, so aj-cluster-baseline could not be checked out. Namespaces were NOT evaluated against policy in this run."
+          fi
+
       - name: Checkout aj-cluster-baseline
         uses: actions/checkout@v4
+        if: steps.tok.outputs.have == 'true'
         with:
           repository: ajay-infra/aj-cluster-baseline
           path: aj-cluster-baseline
           token: ${{ secrets.GH_MODULES_TOKEN }}
 
       - uses: azure/setup-helm@v4
+        if: steps.tok.outputs.have == 'true'
 
       - name: Install gator
+        if: steps.tok.outputs.have == 'true'
         run: |
           curl -sL https://github.com/open-policy-agent/gatekeeper/releases/download/v3.17.1/gator-v3.17.1-linux-amd64.tar.gz \
             | tar xz && sudo mv gator /usr/local/bin/
 
       - name: Render and evaluate
+        if: steps.tok.outputs.have == 'true'
         run: python3 scripts/validate.py aj-cluster-baseline
+
+      - name: Say so if it did not run
+        if: steps.tok.outputs.have != 'true'
+        run: |
+          echo "NOT VERIFIED — GH_MODULES_TOKEN is unset, so no namespace was"
+          echo "evaluated against policy in this run. Set the secret to enable it."
