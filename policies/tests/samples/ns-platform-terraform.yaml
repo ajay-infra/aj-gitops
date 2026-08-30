@@ -1,0 +1,25 @@
+# A platform namespace exactly as aj-infra-platform/namespaces.tf renders it.
+#
+# This case exists because every one of these namespaces used to be created by
+# `create_namespace = true` on a helm_release, which produces a namespace with
+# NO labels — so the platform could not install itself onto a cluster running
+# its own policies, and Cilium left every platform component unrestricted
+# because no policy selected it.
+#
+# apisix is the interesting one: it is the estate's only `edge` namespace, and
+# `edge` is the segment the internet-facing NLB reaches. A missing label there
+# is the difference between "the gateway is the only public entry point" and
+# "every platform namespace is".
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: apisix
+  labels:
+    team: infra-core
+    platform.aj/class: platform
+    platform.aj/customer: internal
+    platform.aj/segment: edge
+    app.kubernetes.io/name: apisix
+    app.kubernetes.io/managed-by: terraform
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

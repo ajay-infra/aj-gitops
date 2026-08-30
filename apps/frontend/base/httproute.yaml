@@ -6,9 +6,12 @@ metadata:
   labels:
     app.kubernetes.io/name: frontend
 spec:
+  # APISIX replaced Kong as the gateway. The parent Gateway lives in the
+  # `apisix` namespace, which is the estate's only `platform.aj/segment: edge`
+  # namespace — an HTTPRoute in `app` is reachable from `edge` and nowhere else.
   parentRefs:
-    - name: kong
-      namespace: kong
+    - name: apisix
+      namespace: apisix
       sectionName: https
   hostnames:
     - frontend.example.com  # overridden per env in overlay

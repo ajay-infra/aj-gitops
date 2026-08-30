@@ -4,6 +4,17 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Changed — one rule for who declares a namespace
+**Every namespace is declared exactly once, with the full label set, by the repo that owns the component — and nothing creates one implicitly.** `falcon-system` moves to `aj-infra-platform/namespaces.tf` (Terraform installs Falcon), taking its Pod Security and Gatekeeper-exemption labels with it. `cloudability` stays here: ArgoCD installs it, but its manifests live in this repo.
+
+It was declared here **and** created by `create_namespace = true`, so whichever landed first decided whether it had labels.
+
+### Added — a gator case pinning the label set the two repos must agree on
+`ns-platform-terraform.yaml` is a platform namespace exactly as `namespaces.tf` renders it, asserted admissible. Eleven platform namespaces were Helm-created and unlabelled until 2026-08-29, so `require-cost-labels` and `require-segment-label` would have rejected nine of them — the platform could not have installed itself onto a cluster running these policies. If the two label sets ever diverge, this case fails before a cluster does.
+
+### Removed — the last of Kong
+`cert-manager/certificate-kong-wildcard.yaml` issued a wildcard into the `kong` namespace for a Gateway that no longer exists, and `apps/frontend/base/httproute.yaml` still had `parentRefs` pointing at it. Both now target `apisix`, the estate's only `edge` namespace.
+
 ### Added — `require-product-line`, shipped in dryrun
 - **SaaS namespaces must declare which product line they belong to** (`platform.aj/product-line`). SaaS has two independent chargeback axes where product has one: revenue is contracted per **customer** and recognised per **product line**, and a customer buys several lines while a line is sold to many customers. `require-cost-labels` carries the first; this carries the second. Neither derives from the other — collapsing them is the mistake `Model` made.
 - **Vocabulary is a constraint parameter** (`allowedLines`: `crm`, `analytics`, `merch`, `pos`, `ticketing`, `shared`), not template Rego and **not the org SCP**. The SCP checks the tag is *present*; only this checks it is *real*. A closed list in an SCP would mean editing the one control an account administrator cannot override every time the business names a product. Adding a line is a one-line edit here.

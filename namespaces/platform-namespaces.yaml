@@ -1,39 +1,17 @@
 ---
-# falcon-system — CrowdStrike Falcon sensor.
+# Platform namespaces that no installer declares.
 #
-# `privileged` is required, not sloppiness: an EDR sensor needs host PID, host
-# network and elevated capabilities to see what it exists to see. This is the
-# one namespace where `restricted` would defeat the component's purpose.
+# falcon-system used to live here AND be created by `create_namespace = true`
+# in aj-infra-platform's falcon.tf, so whichever landed first decided whether it
+# had labels. It moved to aj-infra-platform/namespaces.tf on 2026-08-29 — the
+# repo that installs a component declares its namespace — and its Pod Security
+# and Gatekeeper-exemption labels went with it.
 #
-# The exemption is narrow by design — it applies to this namespace only, and the
-# Gatekeeper ignore label below is scoped the same way.
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: falcon-system
-  labels:
-    app.kubernetes.io/managed-by: argocd
-    team: platform
-    # OPA Gatekeeper excludes this namespace from no-privileged-containers constraint
-    admission.gatekeeper.sh/ignore: "true"
-    platform.aj/segment: platform
-    # Cost attribution. `team` is who OPERATES this; `class` is who PAYS for it,
-    # and they are allowed to differ — data-access is operated by platform and
-    # paid for by product.
-    #
-    # No `env` label, deliberately: k8s-manifests is synced verbatim to every
-    # cluster from one pinned tag, so a static env label would be wrong in all
-    # but one. Environment is a CLUSTER property; Cloudability takes it from
-    # there.
-    platform.aj/class: platform
-    platform.aj/customer: internal
-    # Deliberately privileged — see the note above. Audit and warn remain at
-    # `restricted` so anything beyond what the sensor genuinely needs still
-    # surfaces in the audit log rather than passing silently.
-    pod-security.kubernetes.io/enforce: privileged
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
----
+# cloudability stays: ArgoCD installs it from a remote chart, but its manifests
+# live in this repo, so this is where it is declared. Its ApplicationSet no
+# longer carries CreateNamespace=true, which would have raced this declaration
+# and won with an unlabelled namespace.
+
 # cloudability — cost allocation agent
 apiVersion: v1
 kind: Namespace

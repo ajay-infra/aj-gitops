@@ -157,6 +157,14 @@ tests:
       - name: missing-label-is-denied
         object: samples/ns-segment-missing.yaml
         assertions: [{violations: yes, message: "no platform.aj/segment label"}]
+      - name: a-terraform-declared-platform-namespace-is-admissible
+        # The regression this repo and aj-infra-platform now share: platform
+        # namespaces were Helm-created and unlabelled, so this constraint would
+        # have rejected all nine of them. If the label set in namespaces.tf and
+        # the one required here ever diverge, the platform stops installing —
+        # this case is where that shows up.
+        object: samples/ns-platform-terraform.yaml
+        assertions: [{violations: no}]
       - name: unknown-segment-is-denied
         object: samples/ns-segment-unknown.yaml
         assertions: [{violations: yes, message: "not a known segment"}]
@@ -174,6 +182,14 @@ tests:
         assertions: [{violations: no}]
       - name: dedicated-customer-namespace-is-allowed
         object: samples/ns-cost-dedicated-customer.yaml
+        assertions: [{violations: no}]
+      - name: a-terraform-declared-platform-namespace-is-admissible
+        # The regression this repo and aj-infra-platform now share: platform
+        # namespaces were Helm-created and unlabelled, so this constraint would
+        # have rejected all nine of them. If the label set in namespaces.tf and
+        # the one required here ever diverge, the platform stops installing —
+        # this case is where that shows up.
+        object: samples/ns-platform-terraform.yaml
         assertions: [{violations: no}]
       - name: missing-class-is-denied
         object: samples/ns-cost-missing-class.yaml

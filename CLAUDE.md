@@ -14,7 +14,7 @@ Covers:
 - OPA Gatekeeper mutation policies (ECR pull-through cache image rewrite)
 - Karpenter NodePool + EC2NodeClass (node autoscaling config)
 - KEDA ScaledObjects (event-driven pod autoscaling)
-- Kong KongPlugin CRDs (JWT, rate-limiting, correlation-id)
+- APISIX ApisixPluginConfig bundles (request-id, opa, rate limiting)
 - ExternalSecrets (pull Aurora + Valkey credentials from Secrets Manager)
 - Namespace definitions (platform + workload namespaces)
 - Falcon DaemonSet (CrowdStrike runtime security sensor)
@@ -72,14 +72,9 @@ keda/
   backend-scaler.yaml         # ScaledObject: backend Deployment — Prometheus scaler
   frontend-scaler.yaml        # ScaledObject: frontend Deployment — HTTP request rate
 
-kong/
-  correlation-id.yaml         # KongPlugin: inject X-Correlation-ID on all requests
-  jwt.yaml                    # KongPlugin: JWT validation for authenticated routes
-  rate-limiting.yaml          # KongPlugin: per-consumer rate limiting (backed by Valkey)
-
 namespaces/
-  platform-namespaces.yaml    # argocd, monitoring, falcon-system, cloudability, arc-runners
-  workload-namespaces.yaml    # frontend, backend, llm, search, data-access
+  platform-namespaces.yaml    # cloudability ONLY — see "who declares a namespace" below
+  workload-namespaces.yaml    # frontend, backend, data-access
 
 network-policies/             # CiliumNetworkPolicy per tier — ALLOW rules only
   README.md                   #   read before adding default-deny
@@ -361,9 +356,37 @@ Two deliberate choices:
 - **Separate constraint from `require-cost-labels`.** That one enforces at
   `deny` and must keep doing so. Mixing a not-ready rule into it would have
   meant weakening a rule that *is* ready.
-- **Applies only to `class: product` and `class: saas`.** Platform namespaces
-  are overhead, not a product. Requiring a code on `monitoring` would mean
-  inventing one to satisfy a rule — which is how a taxonomy starts describing
-  something other than reality.
+- **Applies only to `class: product`.** Platform namespaces are overhead, not a
+  product, and requiring a code on `monitoring` would mean inventing one to
+  satisfy a rule. `class: saas` was in this list and was removed: SaaS is a
+  separate profile whose chargeback keys are `customer` and `product-line`.
 
 Flip to `deny` once real codes are assigned.
+
+---
+
+## Who declares a namespace
+
+**Every namespace is declared exactly once, with the full label set, by the repo
+that owns the component — and nothing creates one implicitly.**
+
+| Component installed by | Namespace declared in |
+|---|---|
+| Terraform (`helm_release`) | `aj-infra-platform/namespaces.tf`, from `local.platform_components` |
+| ArgoCD, manifests in this repo | `namespaces/` here |
+| ArgoCD, remote chart, nothing else declares it | `managedNamespaceMetadata` in its ApplicationSet |
+
+`create_namespace = true` and `CreateNamespace=true` both produce a namespace
+with **no labels**, which is simultaneously fail-open to Cilium and inadmissible
+to `require-cost-labels` / `require-segment-label`. Eleven platform namespaces
+were created that way until 2026-08-29 — so the platform could not have
+installed itself onto a cluster running these policies, and `apisix`, the
+internet-facing edge, had no network policy selecting it.
+
+`falcon-system` is the worked example of why "exactly once" matters: it was
+declared here **and** created by Helm, so whichever landed first decided whether
+it had labels. It now lives in `aj-infra-platform` — with its Pod Security and
+Gatekeeper-exemption labels, which an EDR sensor cannot work without.
+
+`policies/tests/samples/ns-platform-terraform.yaml` pins the label set the two
+repos have to agree on. If they diverge, that case fails before a cluster does.
