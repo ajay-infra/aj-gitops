@@ -1,0 +1,6 @@
+apiVersion: v2
+name: namespace
+description: Renders one namespace from a registry entry — Namespace, ResourceQuota, LimitRange.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
