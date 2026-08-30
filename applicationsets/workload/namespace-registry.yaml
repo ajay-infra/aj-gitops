@@ -1,0 +1,101 @@
+---
+# ApplicationSet — namespaces on all workload clusters
+#
+# One Application per namespace, generated from aj-namespace-registry. Each
+# renders that repo's chart with the namespace's own registry entry as values,
+# producing a Namespace, a ResourceQuota and a LimitRange.
+#
+# ONE APPLICATION PER NAMESPACE, not one for the whole registry: a namespace is
+# the unit people add, remove and argue about, so it should be the unit that
+# shows sync status and gets pruned. A single Application over the directory
+# would make one bad entry block every namespace.
+#
+# WHY A MATRIX. The clusters generator alone cannot see the registry files, and
+# the git generator alone does not know which clusters exist. The matrix gives
+# the cross-product — every entry under registry/all-workload/ on every cluster
+# labelled tier=workload, which is exactly what that directory name promises.
+#
+# Placement lives in the DIRECTORY, not in the entry. A matrix cannot filter its
+# cross-product by a field inside the file, so a `clusters:` key in an entry
+# would read better and silently place the namespace everywhere. Narrower scopes
+# get their own directory and their own ApplicationSet.
+#
+# NO CreateNamespace. This ApplicationSet is what creates namespaces; if it
+# needed the option it would be creating one implicitly, unlabelled, which is
+# the failure the registry exists to remove.
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: workload-namespaces
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions: ["missingkey=error"]
+
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  tier: workload
+              values:
+                autoSync: "{{.metadata.labels.auto_sync}}"
+          - git:
+              repoURL: https://github.com/ajay-infra/aj-namespace-registry
+              revision: main
+              files:
+                - path: "registry/all-workload/*.yaml"
+
+  template:
+    metadata:
+      # `ns-` prefixed so these are distinguishable at a glance from the
+      # Applications that deploy INTO a namespace.
+      name: "ns-{{.namespace}}-{{.name}}"
+      namespace: argocd
+      labels:
+        component:  namespace
+        namespace:  "{{.namespace}}"
+        team:       "{{.identity.team}}"
+        cluster:    "{{.name}}"
+      annotations:
+        # Namespaces must exist before anything deployed into them. A negative
+        # wave puts every namespace ahead of every workload Application.
+        argocd.argoproj.io/sync-wave: "-1"
+      finalizers:
+        - resources-finalizer.argocd.argoproj.io
+    spec:
+      project: platform
+
+      sources:
+        - repoURL: https://github.com/ajay-infra/aj-namespace-registry
+          targetRevision: main
+          path: chart
+          helm:
+            releaseName: "ns-{{.namespace}}"
+            valueFiles:
+              - $values/registry/all-workload/{{.namespace}}.yaml
+
+        - repoURL: https://github.com/ajay-infra/aj-namespace-registry
+          targetRevision: main
+          ref: values
+
+      destination:
+        server: "{{.server}}"
+        # Cluster-scoped Namespace plus two objects inside it. `default` is the
+        # Application's own namespace field, not where the resources land — the
+        # ResourceQuota and LimitRange carry their own `metadata.namespace`.
+        namespace: default
+
+      syncPolicy:
+        automated:
+          prune:    "{{.values.autoSync}}"
+          selfHeal: "{{.values.autoSync}}"
+        syncOptions:
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 15s
+            factor: 2
+            maxDuration: 2m
