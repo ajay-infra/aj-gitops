@@ -4,6 +4,17 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Changed — renamed from `k8s-manifests` to `aj-cluster-baseline`
+Three reasons, in increasing order of consequence:
+
+1. It was the only infra repo not named `aj-*` — 21 of 23 are, and the other exception is a product.
+2. It did not distinguish this repo from `aj-platform-gitops`, which is *also* Kubernetes manifests synced by ArgoCD. The real split is control plane (**what goes where**) versus payload (**what runs inside a workload cluster**).
+3. It said nothing about the property that actually governs the repo: **synced verbatim to every cluster from one pinned tag, no templating.** That is why there is no `env` namespace label, why `allowedLines` can only live in one place, and why `apps/` never belonged.
+
+**The third reason was not cosmetic.** `apps/` is the one directory whose purpose is to *differ* per environment. Under a name meaning "cluster baseline" it would have looked obviously misplaced; under "k8s manifests" it looked at home, so nobody questioned it and `recurse: true` swept it up — applying three environments' patch fragments to every cluster (`aj-platform-gitops#14`).
+
+The test for what belongs here is now written in `CLAUDE.md`: **would it be correct, unchanged, on every workload cluster in the estate?**
+
 ### Changed — one rule for who declares a namespace
 **Every namespace is declared exactly once, with the full label set, by the repo that owns the component — and nothing creates one implicitly.** `falcon-system` moves to `aj-infra-platform/namespaces.tf` (Terraform installs Falcon), taking its Pod Security and Gatekeeper-exemption labels with it. `cloudability` stays here: ArgoCD installs it, but its manifests live in this repo.
 
@@ -41,7 +52,7 @@ It was declared here **and** created by `create_namespace = true`, so whichever 
 - Four `gator` cases including a dedicated-customer namespace and the empty-customer rejection.
 
 ### Fixed — the taxonomy required an `env` label that cannot exist
-`label-taxonomy.md` listed `env` as a required namespace label. **No namespace had one, and none could:** `k8s-manifests` is synced verbatim to every cluster from a single pinned tag with no templating, so a static `env` label would be wrong in every cluster but one. Environment is a cluster property. Corrected in the taxonomy and documented here.
+`label-taxonomy.md` listed `env` as a required namespace label. **No namespace had one, and none could:** `aj-cluster-baseline` is synced verbatim to every cluster from a single pinned tag with no templating, so a static `env` label would be wrong in every cluster but one. Environment is a cluster property. Corrected in the taxonomy and documented here.
 
 
 

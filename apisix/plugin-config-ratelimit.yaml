@@ -1,6 +1,6 @@
 # ApisixPluginConfig — rate limiting.
 #
-# Replaces k8s-manifests/kong/rate-limiting.yaml, which was per-consumer and
+# Replaces aj-cluster-baseline/kong/rate-limiting.yaml, which was per-consumer and
 # Valkey-backed. Same shape here: `limit-count` keyed on the consumer when one
 # was identified, with shared counters so the limit is global across gateway
 # replicas rather than per-pod.

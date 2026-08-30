@@ -3,7 +3,7 @@
 # Bind from a route with:
 #   spec.http[].plugin_config_name: authz
 #
-# Replaces k8s-manifests/kong/{jwt,correlation-id}.yaml. Note what is NOT here:
+# Replaces aj-cluster-baseline/kong/{jwt,correlation-id}.yaml. Note what is NOT here:
 # there is no JWT plugin. Token verification happens in OPA — see
 # opa/policy-authz.yaml for why, but the short version is that it makes issuers
 # DATA rather than gateway configuration, which is the difference between adding

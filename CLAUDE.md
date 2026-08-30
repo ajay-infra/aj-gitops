@@ -1,6 +1,24 @@
-# CLAUDE.md — k8s-manifests
+# CLAUDE.md — aj-cluster-baseline
 
-> GitOps manifest repository. Synced to all registered workload clusters by ArgoCD.
+> The identical baseline every workload cluster gets. Synced **verbatim** from
+> one pinned tag by ArgoCD — no templating, no per-cluster variation.
+
+**Renamed from `k8s-manifests` on 2026-08-29.** The old name broke the estate's
+`aj-*` convention, did not distinguish this repo from `aj-platform-gitops`
+(which is also Kubernetes manifests synced by ArgoCD), and — the reason that
+actually mattered — said nothing about the verbatim-everywhere property that
+governs what may live here.
+
+That property is load-bearing. It is why there is no `env` namespace label, why
+constraint parameters must be literals, and why `apps/` did not belong: `apps/`
+is the one thing that *differs* per environment, and under the old name it
+looked at home. `recurse: true` swept it up, applying three environments' patch
+fragments to every cluster, until `aj-platform-gitops#14`.
+
+**The test for whether something belongs here: would it be correct, unchanged,
+on every workload cluster in the estate?** If not, it belongs in
+`aj-platform-gitops` (which decides what goes where) or in the component's own
+repo.
 
 ---
 
@@ -24,7 +42,7 @@ Covers:
 ## Where It Fits
 
 **Architecture layers:** L8 (Secrets), L9 (API Gateway), L10 (App Workloads), L11 (Policy)
-**Synced by:** ArgoCD on each central cluster hub, via `applicationsets/workload/k8s-manifests.yaml` in `aj-platform-gitops`
+**Synced by:** ArgoCD on each central cluster hub, via `applicationsets/workload/aj-cluster-baseline.yaml` in `aj-platform-gitops`
 **Sync policy:** Auto-sync on dev + staging clusters; manual gate on prod clusters
 **Cluster selector:** All clusters with label `tier: workload` registered with the ArgoCD hub
 
@@ -37,7 +55,7 @@ You do not apply this repo manually. ArgoCD handles it automatically after the w
 ```
 provision-eks.yml apply → argocd-register stage creates cluster Secret
 → ArgoCD detects new cluster matching tier=workload label
-→ workload-k8s-manifests ApplicationSet generates Application for new cluster
+→ workload-aj-cluster-baseline ApplicationSet generates Application for new cluster
 → ArgoCD syncs entire repo to the cluster
 ```
 
@@ -337,7 +355,7 @@ so it is rejected explicitly.
 
 ### There is no `env` label, deliberately
 
-`k8s-manifests` is synced **verbatim** to every cluster from one pinned tag, with
+`aj-cluster-baseline` is synced **verbatim** to every cluster from one pinned tag, with
 no templating. A static `env` label would therefore be wrong in every cluster but
 one. Environment is a **cluster** property and Cloudability takes it from there.
 

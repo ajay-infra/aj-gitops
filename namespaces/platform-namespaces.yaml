@@ -25,7 +25,7 @@ metadata:
     # and they are allowed to differ — data-access is operated by platform and
     # paid for by product.
     #
-    # No `env` label, deliberately: k8s-manifests is synced verbatim to every
+    # No `env` label, deliberately: aj-cluster-baseline is synced verbatim to every
     # cluster from one pinned tag, so a static env label would be wrong in all
     # but one. Environment is a CLUSTER property; Cloudability takes it from
     # there.
