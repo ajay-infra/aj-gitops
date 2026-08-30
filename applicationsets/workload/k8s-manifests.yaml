@@ -54,7 +54,30 @@ spec:
           # inside the pinned v1.0.0 tag, so this was latent rather than
           # theoretical — it simply has not fired because no cluster is
           # provisioned yet. Found 2026-08-28 while adding deny-acm-exportable.
-          exclude: "policies/tests/**"
+          #
+          # ...and `apps/`, which does not belong to this sync model at all.
+          # Every other directory here is applied VERBATIM and identically to
+          # every cluster. `apps/` is kustomize: a base plus dev/staging/prod
+          # overlays, and `apps.yaml` already deploys the right overlay per
+          # cluster. Recursing it applies, to every cluster at once:
+          #
+          #   - the unpatched base
+          #   - all three environments' patch fragments, as standalone objects
+          #   - every kustomization.yaml, which is not a cluster resource
+          #
+          # The fragments are the dangerous part. `apps/frontend/overlays/prod/
+          # replicas-patch.yaml` carries apiVersion, kind, name and namespace,
+          # so it is not obviously a fragment — it reads as a Deployment named
+          # `frontend` with replicas 2 and NO pod template. This Application
+          # cannot sync it, and because ArgoCD syncs an Application as a unit,
+          # the constraints, namespaces and network policies alongside it do not
+          # land either. A broken app manifest would take the cluster's whole
+          # policy baseline down with it.
+          #
+          # Same bug as the line above, found the same way: recurse:true takes
+          # everything, and what it takes has to be checked directory by
+          # directory. Latent only because no cluster is provisioned.
+          exclude: "{policies/tests/**,apps/**}"
 
       destination:
         server:    "{{server}}"
