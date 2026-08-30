@@ -57,6 +57,17 @@ spec:
         automated:
           prune:    "{{values.autoSync}}"
           selfHeal: "{{values.autoSync}}"
+        # ArgoCD installs this from a remote chart and nothing else declares
+        # `gateway-system`, so ArgoCD declares it — natively, with labels, rather
+        # than letting CreateNamespace produce a bare one.
+        managedNamespaceMetadata:
+          labels:
+            team: infra-core
+            platform.aj/class: platform
+            platform.aj/customer: internal
+            platform.aj/segment: platform
+            app.kubernetes.io/name: gateway-api-crds
+            app.kubernetes.io/managed-by: argocd
         syncOptions:
           - CreateNamespace=true
           - ServerSideApply=true

@@ -68,7 +68,12 @@ spec:
           prune:    "{{values.autoSync}}"
           selfHeal: "{{values.autoSync}}"
         syncOptions:
-          - CreateNamespace=true
+          # No CreateNamespace. The namespace is declared in
+          # aj-infra-platform/namespaces.tf, with the labels
+          # cost attribution and network policy both need. Creating it here
+          # would race that declaration and win with an UNLABELLED namespace,
+          # which Cilium then leaves unrestricted. A missing namespace should
+          # fail this sync loudly instead.
           - ServerSideApply=true
         retry:
           limit: 3
