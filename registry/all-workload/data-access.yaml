@@ -1,0 +1,13 @@
+# `team` and `class` deliberately differ: operated by platform, paid for by
+# product. The taxonomy's worked example of why they are two fields.
+namespace: data-access
+
+identity:
+  team:     platform
+  class:    product
+  customer: internal
+  segment:  data
+
+guardrails:
+  podSecurity: restricted
+  quota:       small

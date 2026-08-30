@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    name: YAML lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install yamllint
+      - run: yamllint registry/ chart/ .github/
+
+  helm:
+    name: Helm lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Lint the chart
+        run: |
+          helm lint chart/ \
+            --set namespace=lint --set identity.team=t --set identity.class=product \
+            --set identity.customer=internal --set identity.segment=app \
+            --set guardrails.quota=small
+
+  policy:
+    name: Every namespace against the live policy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The constraints are NOT vendored here. Vendoring them would create a
+      # second copy that drifts from the enforcing one, which is the failure
+      # this repo exists to remove — so CI reads the real thing at HEAD.
+      - name: Checkout aj-cluster-baseline
+        uses: actions/checkout@v4
+        with:
+          repository: ajay-infra/aj-cluster-baseline
+          path: aj-cluster-baseline
+          token: ${{ secrets.GH_MODULES_TOKEN }}
+
+      - uses: azure/setup-helm@v4
+
+      - name: Install gator
+        run: |
+          curl -sL https://github.com/open-policy-agent/gatekeeper/releases/download/v3.17.1/gator-v3.17.1-linux-amd64.tar.gz \
+            | tar xz && sudo mv gator /usr/local/bin/
+
+      - name: Render and evaluate
+        run: python3 scripts/validate.py aj-cluster-baseline

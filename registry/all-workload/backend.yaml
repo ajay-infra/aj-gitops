@@ -1,0 +1,11 @@
+namespace: backend
+
+identity:
+  team:     product
+  class:    product
+  customer: internal
+  segment:  app
+
+guardrails:
+  podSecurity: restricted
+  quota:       large

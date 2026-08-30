@@ -1,0 +1,25 @@
+{{- $tier := .Values.guardrails.quota -}}
+{{- if and $tier (ne $tier "none") }}
+---
+# A ResourceQuota on requests/limits makes every pod REQUIRED to set them, and
+# `require-resource-limits` in aj-cluster-baseline rejects containers that do
+# not. Third-party charts routinely omit them. Without a LimitRange supplying
+# defaults, adding a quota to a namespace breaks every such chart in it — so the
+# two ship together and never separately.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: {{ .Values.namespace }}-defaults
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "ns.labels" . | nindent 4 }}
+spec:
+  limits:
+    - type: Container
+      defaultRequest:
+        cpu:    {{ .Values.defaultContainerResources.requests.cpu | quote }}
+        memory: {{ .Values.defaultContainerResources.requests.memory | quote }}
+      default:
+        cpu:    {{ .Values.defaultContainerResources.limits.cpu | quote }}
+        memory: {{ .Values.defaultContainerResources.limits.memory | quote }}
+{{- end }}
