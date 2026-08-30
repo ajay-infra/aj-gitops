@@ -12,7 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pip install yamllint
-      - run: yamllint registry/ chart/ .github/
+      # chart/templates/ is deliberately absent: Helm templates are Go
+      # templates, not YAML, and yamllint cannot parse them. `helm lint` and
+      # `helm template` in the jobs below are what check those.
+      - run: yamllint registry/ chart/Chart.yaml chart/values.yaml .github/
 
   helm:
     name: Helm lint
