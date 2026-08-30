@@ -8,7 +8,9 @@
 # ecr_registry annotation on cluster Secrets set by provision-eks.yml:
 #   kubectl annotate secret <cluster> -n argocd ecr_registry=<account>.dkr.ecr.<region>.amazonaws.com
 #
-# ORDERING: This ApplicationSet must be synced before workload-kong.
+# ORDERING: This ApplicationSet must be synced before anything that
+# references a Gateway API type — today APISIX in aj-infra-platform, and the
+# HTTPRoutes in aj-cluster-baseline. It used to say "before workload-kong".
 # Gateway API CRDs must exist before KIC starts or it will crash-loop.
 # Sync wave 1 — KIC is wave 2, GatewayClass+Gateway are wave 3.
 ---

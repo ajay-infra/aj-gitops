@@ -10,7 +10,7 @@
 #
 #   2. bootstrap-workload-platform
 #      → applicationsets/workload/          (all workload cluster ApplicationSets)
-#         k8s-monitoring, apps, arc-runners, k8s-manifests, cloudability
+#         k8s-monitoring, apps, arc-runners, aj-cluster-baseline, cloudability
 #         These target only clusters registered with this hub (dev + staging).
 #
 # Everything after this is ArgoCD-managed. Upgrades = PRs to this repo.

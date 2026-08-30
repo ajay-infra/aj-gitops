@@ -15,6 +15,24 @@ validatingWebhookFailurePolicy: Ignore
 mutatingWebhookFailurePolicy: Ignore
 
 validatingWebhookExemptNamespacesLabels: []
+# ⚠ THIS IS THE REAL EXEMPTION SURFACE, and it is wider than it looks.
+#
+# A namespace here bypasses the Gatekeeper webhook ENTIRELY — not just the
+# label constraints, but no-privileged-containers, allowed-registries,
+# deny-latest-tag, require-probes and require-resource-limits too. And because
+# Kubernetes matches a webhook's namespaceSelector against a Namespace object's
+# OWN labels, a namespace named here cannot be rejected at creation either.
+#
+# That is invisible from the constraint files: their `excludedNamespaces` lists
+# name five system namespaces, and reading them alone would tell you these
+# eleven are covered. They are not. Anyone reasoning about what Gatekeeper
+# enforces has to read this list too.
+#
+# The list is identical in every environment, prod-regulated included.
+#
+# `apisix` and `opa` are deliberately ABSENT — the gateway and the policy engine
+# are evaluated like any workload. `kong` was here until 2026-08-29 and is gone
+# with the rest of Kong.
 validatingWebhookIgnoredNamespaces:
       - kube-system
       - kube-public
@@ -29,7 +47,6 @@ validatingWebhookIgnoredNamespaces:
       - cloudability
       - arc-runners
       - arc-systems
-      - kong
       - gateway-system
 
 auditInterval: 300

@@ -4,7 +4,7 @@
 GitOps source of truth for the central cluster platform layer and workload-cluster
 add-ons: Helm values for ArgoCD, LGTM stack, k8s-monitoring/Alloy, Argo Rollouts, plus
 ApplicationSets that deploy them. No Terraform, no team application manifests (those
-live in team repos or `k8s-manifests`).
+live in team repos or `aj-cluster-baseline`).
 
 ## Type
 `gitops-config`

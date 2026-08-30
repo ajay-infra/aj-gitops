@@ -15,7 +15,7 @@ spec:
   description: Application workloads — frontend, backend, llm-router, search, rag-worker
 
   sourceRepos:
-    - https://github.com/ajay-infra/k8s-manifests
+    - https://github.com/ajay-infra/aj-cluster-baseline
     - https://github.com/ajay-infra/aj-platform-gitops
 
   destinations:

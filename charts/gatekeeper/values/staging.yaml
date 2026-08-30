@@ -36,7 +36,6 @@ validatingWebhookIgnoredNamespaces:
       - cloudability
       - arc-runners
       - arc-systems
-      - kong
       - gateway-system
 
 # Audit re-evaluates existing objects on a timer, catching things admitted
