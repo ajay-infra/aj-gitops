@@ -22,8 +22,8 @@ jobs:
         # chart templates are Go templates, not YAML — helm lint checks those.
         run: |
           yamllint applicationsets/ bootstrap/ projects/ charts/ \
-                   baseline/ namespaces/registry/ \
-                   namespaces/chart/Chart.yaml namespaces/chart/values.yaml
+                   baseline/ workloads/registry/ \
+                   workloads/chart/Chart.yaml workloads/chart/values.yaml
 
   helm-lint:
     name: Helm lint
@@ -33,10 +33,9 @@ jobs:
       - uses: azure/setup-helm@v4
       - name: The namespace chart
         run: |
-          helm lint namespaces/chart \
-            --set namespace=lint --set identity.team=t --set identity.class=product \
-            --set identity.customer=internal --set identity.segment=app \
-            --set guardrails.quota=small
+          helm lint workloads/chart \
+            --set namespace=lint --set cluster=lint --set class=product \
+            --set customer=internal --set team=t --set segment=app --set quota=small
 
   validate-manifests:
     name: Validate Kubernetes manifests
@@ -100,4 +99,4 @@ jobs:
         # The check that could NOT run before consolidation: it had to read the
         # constraints from another private repo, and GH_MODULES_TOKEN does not
         # exist in this org. Both halves are in this repo now, so it just runs.
-        run: python3 namespaces/scripts/validate.py baseline
+        run: python3 workloads/scripts/validate.py baseline
