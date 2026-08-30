@@ -75,12 +75,17 @@ spec:
           prune: "{{values.autoSync}}"
           selfHeal: "{{values.autoSync}}"
         syncOptions:
-          # No CreateNamespace. The namespace is declared in
-          # aj-cluster-baseline/namespaces/workload-namespaces.yaml, with the labels
-          # cost attribution and network policy both need. Creating it here
-          # would race that declaration and win with an UNLABELLED namespace,
-          # which Cilium then leaves unrestricted. A missing namespace should
-          # fail this sync loudly instead.
+          # No CreateNamespace. Namespaces come from aj-namespace-registry via
+          # the workload-namespaces ApplicationSet, which renders them with the
+          # labels cost attribution and network policy both need, at sync-wave
+          # -1 so they exist before this Application runs.
+          #
+          # Creating one here would race that and win with an UNLABELLED
+          # namespace, which Cilium then leaves unrestricted.
+          #
+          # `llm` and `search` are why this matters: apps.yaml deploys into
+          # them and NO repo declared them, so they were being created here,
+          # bare. Fixed by the registry, not by putting the option back.
           - ServerSideApply=true
           - PrunePropagationPolicy=foreground
           - PruneLast=true  # delete old resources only after new ones are healthy

@@ -71,13 +71,28 @@ spec:
         automated:
           prune:    "{{values.autoSync}}"
           selfHeal: "{{values.autoSync}}"
+        # ArgoCD installs Cloudability from a remote chart and its manifests do
+        # not live in aj-cluster-baseline — the repo only ever declared the
+        # namespace, which was the wrong owner under the rule that the mechanism
+        # INSTALLING a component declares its namespace. Corrected 2026-08-29:
+        # ArgoCD declares it, natively, with labels.
+        #
+        # `cloudability` is platform, not a tenant, so it does not belong in
+        # aj-namespace-registry either — that repo owns workload and tenant
+        # namespaces only.
+        managedNamespaceMetadata:
+          labels:
+            team: platform
+            platform.aj/class: platform
+            platform.aj/customer: internal
+            platform.aj/segment: platform
+            app.kubernetes.io/name: cloudability
+            app.kubernetes.io/managed-by: argocd
+            pod-security.kubernetes.io/enforce: restricted
+            pod-security.kubernetes.io/audit: restricted
+            pod-security.kubernetes.io/warn: restricted
         syncOptions:
-          # No CreateNamespace. The namespace is declared in
-          # aj-cluster-baseline/namespaces/platform-namespaces.yaml, with the labels
-          # cost attribution and network policy both need. Creating it here
-          # would race that declaration and win with an UNLABELLED namespace,
-          # which Cilium then leaves unrestricted. A missing namespace should
-          # fail this sync loudly instead.
+          - CreateNamespace=true
           - ServerSideApply=true
         retry:
           limit: 3
