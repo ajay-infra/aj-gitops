@@ -5,7 +5,7 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 ## [Unreleased] (2)
 
 ### Fixed
-- **The `k8s-manifests` ApplicationSet deployed the policy test fixtures.** `directory.recurse: true` with no `exclude` deploys every YAML file in the repo, and `k8s-manifests/policies/tests/samples/` holds real manifests that exist to be fed to `gator verify` — several deliberately non-compliant (privileged Pods, `:latest` tags, missing resource limits), plus a live ACK ACM `Certificate` that would request an actual certificate from AWS. They sit inside the pinned `v1.0.0` tag, so this was latent rather than theoretical; it has not fired only because no cluster is provisioned yet. Added `exclude: "policies/tests/**"`.
+- **The `aj-cluster-baseline` ApplicationSet deployed the policy test fixtures.** `directory.recurse: true` with no `exclude` deploys every YAML file in the repo, and `aj-cluster-baseline/policies/tests/samples/` holds real manifests that exist to be fed to `gator verify` — several deliberately non-compliant (privileged Pods, `:latest` tags, missing resource limits), plus a live ACK ACM `Certificate` that would request an actual certificate from AWS. They sit inside the pinned `v1.0.0` tag, so this was latent rather than theoretical; it has not fired only because no cluster is provisioned yet. Added `exclude: "policies/tests/**"`.
   - Found while adding the `deny-acm-exportable` constraint, whose own test samples would have been deployed the same way.
   - Worth generalising: `recurse: true` against a repo that also holds test fixtures deploys the fixtures. Any repo wired into an ApplicationSet this way needs checking for files that are valid Kubernetes objects but are not meant to exist in a cluster.
 
@@ -18,6 +18,19 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 - **Disabled the 3 broken ApplicationSets** documented in the previous entry (`arc-controller`, `gatekeeper`, `falcon`) rather than leaving them live and broken. Moved to a new `applicationsets/workload/_disabled/` subdirectory, which `bootstrap/*.yaml`'s `bootstrap-workload-platform` Application never syncs (confirmed: no `directory.recurse` set on that Application's source, so ArgoCD doesn't descend into subdirectories of `applicationsets/workload/`). Each file got a banner explaining why and how to re-enable; added `_disabled/README.md` with the same. Not deleted — the design work stays, just inert until real Helm values exist for each.
 
 ## [Unreleased]
+
+### Changed — `k8s-manifests` is now `aj-cluster-baseline`
+Repo renamed on GitHub; `repoURL`s, the ApplicationSet filename and its resource names follow. The old name broke the `aj-*` convention, did not distinguish that repo from this one (both are Kubernetes manifests synced by ArgoCD), and said nothing about its governing property — synced verbatim to every cluster from one pinned tag.
+
+### Documented — `validatingWebhookIgnoredNamespaces` is the real exemption surface
+A namespace listed there bypasses the Gatekeeper webhook **entirely** — not just the label constraints but `no-privileged-containers`, `allowed-registries`, `deny-latest-tag`, `require-probes` and `require-resource-limits`. Eleven namespaces are on it, identically in every environment including `prod-regulated`.
+
+**This is invisible from the constraint files.** Their `excludedNamespaces` lists name five system namespaces; reading them alone tells you these eleven are covered. They are not. Kubernetes also matches a webhook's `namespaceSelector` against a Namespace object's *own* labels, so a namespace named here cannot be rejected at creation either — which corrects a claim made in `aj-infra-platform#14`: **five** of the unlabelled platform namespaces would have been rejected at admission, not nine. The other four were already exempt.
+
+Now carries a header saying so. `apisix` and `opa` are deliberately absent — the gateway and the policy engine are evaluated like any workload.
+
+### Removed — the rest of Kong
+`charts/kong/` and `charts/kong-gateway/` were orphaned when the two ApplicationSets were deleted, `kong` was still in every Gatekeeper webhook exemption list, and `gateway-api-crds.yaml` still ordered itself "before workload-kong".
 
 ### Fixed
 - No `skills.md` existed — added one, describing the ApplicationSet pattern, the `provision-eks.yml`/`argocd-register` dependency, and both gaps below so `infra-developer` and any future skill work here starts with accurate context.

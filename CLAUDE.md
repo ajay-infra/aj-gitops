@@ -67,7 +67,7 @@ aj-platform-gitops/
 │       ├── k8s-monitoring.yaml  # Cluster generator: k8s-monitoring on every workload cluster
 │       ├── apps.yaml            # Matrix: platform-managed app workloads (clusters × components)
 │       ├── arc-runners.yaml, cloudability.yaml, external-dns.yaml, kong.yaml, kong-gateway.yaml,
-│       │   gateway-api-crds.yaml, k8s-manifests.yaml, keda.yaml — all fully wired, values exist
+│       │   gateway-api-crds.yaml, aj-cluster-baseline.yaml, keda.yaml — all fully wired, values exist
 │       └── _disabled/  — arc-controller.yaml, gatekeeper.yaml, falcon.yaml, moved here 2026-08-24;
 │                          inert (no directory.recurse), see Known Gaps below to re-enable
 └── .github/workflows/
@@ -352,9 +352,9 @@ sops --encrypt --age $(cat .sops-recipients) secret.yaml > secret.enc.yaml
 
 ---
 
-## `k8s-manifests` ApplicationSet excludes the policy test fixtures
+## `aj-cluster-baseline` ApplicationSet excludes the policy test fixtures
 
-`directory.recurse: true` deploys every YAML file in the repo. `k8s-manifests`
+`directory.recurse: true` deploys every YAML file in the repo. `aj-cluster-baseline`
 also contains `policies/tests/samples/` — real manifests that exist to be fed to
 `gator verify`, not to be applied to a cluster. Several are deliberately
 non-compliant (privileged Pods, `:latest` tags, missing resource limits), and

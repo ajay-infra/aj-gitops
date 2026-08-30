@@ -2,7 +2,7 @@ name: Install Argo Rollouts
 
 # Installs or upgrades Argo Rollouts on a workload cluster via Helm.
 # Argo Rollouts enables pod-level canary and blue-green deployments.
-# Devs define Rollout objects in k8s-manifests instead of Deployment.
+# Devs define Rollout objects in aj-cluster-baseline instead of Deployment.
 #
 # Run this after provision-eks.yml for each workload cluster.
 # Re-run with action: upgrade to bump the chart version.

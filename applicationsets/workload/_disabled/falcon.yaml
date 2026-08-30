@@ -17,7 +17,7 @@
 # Requires ESO ExternalSecret "falcon-credentials" in falcon-system namespace
 # (provisioned by aj-infra-platform ESO + Secrets Manager) to exist before pods start.
 #
-# OPA Gatekeeper no-privileged-containers constraint in k8s-manifests has an
+# OPA Gatekeeper no-privileged-containers constraint in aj-cluster-baseline has an
 # exemption for the falcon-system namespace.
 # No IAM needed — Falcon calls CrowdStrike cloud endpoints over HTTPS, not AWS.
 ---
