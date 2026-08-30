@@ -4,6 +4,24 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Removed — `namespaces/`
+Namespaces are no longer declared here at all.
+
+| Namespace kind | Now declared in |
+|---|---|
+| Workload and tenant | **`aj-namespace-registry`** — one entry per namespace, rendered by its chart |
+| Platform, Terraform-installed | `aj-infra-platform/namespaces.tf` |
+| Platform, ArgoCD from a remote chart | `managedNamespaceMetadata` in its ApplicationSet |
+
+`cloudability` was the last one here, and this repo was never its right owner: it is a remote chart, so nothing of it lives here except the namespace declaration. It moved to `managedNamespaceMetadata`.
+
+`llm` and `search` — deployed into by `apps.yaml` and declared by no repo at all — now have entries.
+
+### Added — the reverse check
+`aj-namespace-registry`'s CI already renders its namespaces against the constraints here at HEAD, so a bad entry fails there. Nothing caught the other direction: **tightening a constraint here could reject every namespace in the estate**, and the first sign would be a cluster refusing to create namespaces.
+
+CI now checks out the registry and evaluates every real namespace against these constraints. The `gator` suite tests policies against *fixtures*; this tests them against the *real* namespaces, which is a different question.
+
 ### Changed — renamed from `k8s-manifests` to `aj-cluster-baseline`
 Three reasons, in increasing order of consequence:
 

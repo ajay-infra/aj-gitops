@@ -34,7 +34,6 @@ Covers:
 - KEDA ScaledObjects (event-driven pod autoscaling)
 - APISIX ApisixPluginConfig bundles (request-id, opa, rate limiting)
 - ExternalSecrets (pull Aurora + Valkey credentials from Secrets Manager)
-- Namespace definitions (platform + workload namespaces)
 - Falcon DaemonSet (CrowdStrike runtime security sensor)
 
 ---
@@ -89,10 +88,6 @@ karpenter/
 keda/
   backend-scaler.yaml         # ScaledObject: backend Deployment — Prometheus scaler
   frontend-scaler.yaml        # ScaledObject: frontend Deployment — HTTP request rate
-
-namespaces/
-  platform-namespaces.yaml    # cloudability ONLY — see "who declares a namespace" below
-  workload-namespaces.yaml    # frontend, backend, data-access
 
 network-policies/             # CiliumNetworkPolicy per tier — ALLOW rules only
   README.md                   #   read before adding default-deny
@@ -388,11 +383,16 @@ Flip to `deny` once real codes are assigned.
 **Every namespace is declared exactly once, with the full label set, by the repo
 that owns the component — and nothing creates one implicitly.**
 
-| Component installed by | Namespace declared in |
+| Namespace kind | Declared in |
 |---|---|
-| Terraform (`helm_release`) | `aj-infra-platform/namespaces.tf`, from `local.platform_components` |
-| ArgoCD, manifests in this repo | `namespaces/` here |
-| ArgoCD, remote chart, nothing else declares it | `managedNamespaceMetadata` in its ApplicationSet |
+| Workload and tenant | **`aj-namespace-registry`** — one entry per namespace, rendered by its chart |
+| Platform, installed by Terraform | `aj-infra-platform/namespaces.tf`, from `local.platform_components` |
+| Platform, installed by ArgoCD from a remote chart | `managedNamespaceMetadata` in its ApplicationSet |
+
+**No namespace is declared in this repo any more.** `namespaces/` was deleted on
+2026-08-29 when the registry took over the workload ones and `cloudability`
+moved to `managedNamespaceMetadata` — it is a remote chart, so this repo was
+never its right owner.
 
 `create_namespace = true` and `CreateNamespace=true` both produce a namespace
 with **no labels**, which is simultaneously fail-open to Cilium and inadmissible

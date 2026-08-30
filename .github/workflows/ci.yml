@@ -21,7 +21,6 @@ jobs:
       - name: Lint all YAML
         run: |
           yamllint \
-            namespaces/ \
             policies/ \
             karpenter/ \
             keda/ \
@@ -51,7 +50,6 @@ jobs:
             -ignore-missing-schemas \
             -summary \
             -kubernetes-version 1.35.0 \
-            namespaces/ \
             falcon/
         # OPA, Karpenter, KEDA, Kong CRDs are not in the default schema —
         # -ignore-missing-schemas skips them; yamllint catches syntax errors.
@@ -139,3 +137,61 @@ jobs:
         # one shared label as full PDB coverage, letting an unprotected
         # Deployment through.
         run: gator verify policies/tests/suite.yaml
+
+  registry-namespaces:
+    name: Every real namespace against these constraints
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The other half of the loop. aj-namespace-registry's CI already renders
+      # its namespaces against the constraints in THIS repo at HEAD — so a bad
+      # registry entry fails there. Nothing caught the reverse: tightening a
+      # constraint here could reject every namespace in the estate, and the
+      # first sign of it would be a cluster refusing to create namespaces.
+      #
+      # The gator suite above tests policies against FIXTURES. This tests them
+      # against the real namespaces, which is a different question.
+      # GH_MODULES_TOKEN does not exist in any repo in this org yet, so this
+      # check CANNOT run today. It skips rather than fails — but it skips
+      # LOUDLY, with a warning annotation on the PR and a final step that says
+      # NOT VERIFIED. A cross-repo check that quietly passes when it never ran
+      # is worse than no check: it is the same shape as every bug this pair of
+      # repos exists to prevent.
+      - name: Is the cross-repo token available?
+        id: tok
+        run: |
+          if [ -n "${{ secrets.GH_MODULES_TOKEN }}" ]; then
+            echo "have=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Cross-repo policy check SKIPPED::GH_MODULES_TOKEN is not set, so aj-namespace-registry could not be checked out. Namespaces were NOT evaluated against policy in this run."
+          fi
+
+      - name: Checkout aj-namespace-registry
+        uses: actions/checkout@v4
+        if: steps.tok.outputs.have == 'true'
+        with:
+          repository: ajay-infra/aj-namespace-registry
+          path: aj-namespace-registry
+          token: ${{ secrets.GH_MODULES_TOKEN }}
+
+      - uses: azure/setup-helm@v4
+        if: steps.tok.outputs.have == 'true'
+
+      - name: Install gator
+        if: steps.tok.outputs.have == 'true'
+        run: |
+          curl -sL https://github.com/open-policy-agent/gatekeeper/releases/download/v3.17.1/gator-v3.17.1-linux-amd64.tar.gz \
+            | tar -xz -C /usr/local/bin gator
+
+      - name: Render every namespace and evaluate it
+        if: steps.tok.outputs.have == 'true'
+        working-directory: aj-namespace-registry
+        run: python3 scripts/validate.py ..
+
+      - name: Say so if it did not run
+        if: steps.tok.outputs.have != 'true'
+        run: |
+          echo "NOT VERIFIED — GH_MODULES_TOKEN is unset, so no namespace was"
+          echo "evaluated against policy in this run. Set the secret to enable it."
