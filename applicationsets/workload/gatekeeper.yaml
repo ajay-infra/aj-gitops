@@ -13,7 +13,7 @@
 #
 #
 # Deploys the Gatekeeper admission controller. ConstraintTemplates + Constraints
-# (the actual policies) live in aj-cluster-baseline and are synced separately.
+# (the actual policies) live in baseline/policies/ and are synced separately.
 # No IAM needed — Gatekeeper only talks to the K8s API server.
 ---
 apiVersion: argoproj.io/v1alpha1

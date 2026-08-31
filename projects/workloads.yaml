@@ -15,7 +15,9 @@ spec:
   description: Application workloads — frontend, backend, llm-router, search, rag-worker
 
   sourceRepos:
-    - https://github.com/ajay-infra/aj-cluster-baseline
+    # sourceRepos is an allow-list, so a stale entry is a standing grant. The
+    # aj-cluster-baseline repo was absorbed into aj-gitops and nothing points at
+    # it any more, but it still exists and was still trusted here.
     - https://github.com/ajay-infra/aj-gitops
 
   destinations:
