@@ -1,0 +1,91 @@
+# ── product hub only ───────────────────────────────────────────────────────────
+# This tree is synced by the product hubs and no other. Editing it cannot reach a
+# saas cluster: the saas hubs sync applicationsets/workload/saas/.
+#
+# The duplication is the isolation. A chart bump wanted on both sides is two
+# edits, deliberately — one model can be explored, broken and rolled back
+# without the other noticing.
+#
+# ⚠️ DISABLED — moved out of applicationsets/workload/ on 2026-08-24.
+# Reason: references $values/charts/arc-controller/values/{{env}}.yaml, but that directory
+# was never created — this ApplicationSet would fail to sync (missing Helm
+# valueFiles source). See CLAUDE.md Known Gaps for detail.
+#
+# ArgoCD's bootstrap-workload-platform Application (bootstrap/*.yaml) does NOT
+# recurse into subdirectories of applicationsets/workload/ (no directory.recurse
+# set), so this file is inert here — safe, reversible, no cluster impact.
+#
+# To re-enable: add real charts/arc-controller/values/<env>.yaml files (real config, not
+# fabricated — see CLAUDE.md for what each one needs), then move this file back
+# up to applicationsets/workload/product/arc-controller.yaml.
+#
+# ApplicationSet — ARC controller on all workload clusters
+#
+# Deploys the Actions Runner Controller operator (arc-systems namespace).
+# The controller watches GitHub for queued jobs and scales runner pods.
+# Runner Scale Sets (the actual runners) are in arc-runners.yaml.
+#
+# IAM for runner pods is provisioned by aj-infra-platform (arc.tf).
+# The controller itself needs no IAM — only the runner pods do.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: product-arc-controller
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+            class: product
+        values:
+          env:          "{{metadata.labels.environment}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "arc-controller-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   arc-controller
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        "oci://{{values.ecr_registry}}/ghcr/actions/actions-runner-controller-charts"
+          chart:          gha-runner-scale-set-controller
+          targetRevision: "0.9.3"
+          helm:
+            releaseName: arc
+            valueFiles:
+              - $values/charts/arc-controller/values/{{values.env}}.yaml
+            parameters:
+              - name:  image.repository
+                value: "{{values.ecr_registry}}/ghcr/actions/gha-runner-scale-set-controller"
+
+        - repoURL:        https://github.com/ajay-infra/aj-gitops
+          targetRevision: v1.0.0
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: arc-systems
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m

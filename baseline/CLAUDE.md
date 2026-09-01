@@ -41,7 +41,7 @@ Covers:
 ## Where It Fits
 
 **Architecture layers:** L8 (Secrets), L9 (API Gateway), L10 (App Workloads), L11 (Policy)
-**Synced by:** ArgoCD on each central cluster hub, via `applicationsets/workload/aj-cluster-baseline.yaml` in `aj-platform-gitops`
+**Synced by:** ArgoCD on each central cluster hub, via `applicationsets/workload/<class>/baseline.yaml`
 **Sync policy:** Auto-sync on dev + staging clusters; manual gate on prod clusters
 **Cluster selector:** All clusters with label `tier: workload` registered with the ArgoCD hub
 

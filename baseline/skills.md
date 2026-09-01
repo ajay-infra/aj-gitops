@@ -2,7 +2,7 @@
 
 ## Purpose
 GitOps manifest repository synced to every registered workload cluster by ArgoCD
-(via `applicationsets/workload/aj-cluster-baseline.yaml` in `aj-platform-gitops`). Terraform
+(via `applicationsets/workload/<class>/baseline.yaml`). Terraform
 never touches these resources — everything here is applied by ArgoCD only. No
 `source =` module usage; not consumed as a Terraform module by anything.
 

@@ -1,0 +1,95 @@
+# ── saas hub only ───────────────────────────────────────────────────────────
+# This tree is synced by the saas hubs and no other. Editing it cannot reach a
+# product cluster: the product hubs sync applicationsets/workload/product/.
+#
+# The duplication is the isolation. A chart bump wanted on both sides is two
+# edits, deliberately — one model can be explored, broken and rolled back
+# without the other noticing.
+#
+# ApplicationSet — external-dns on all workload clusters
+#
+# Watches Ingress + Service objects and creates/updates Route53 records.
+# Critical for blue/green: DNS records are created automatically when the new
+# ALB comes up and cleaned up when it tears down (dev/staging: policy=sync).
+# Prod uses policy=upsert-only — never deletes records automatically.
+#
+# Pod Identity IAM (Route53) is provisioned by aj-infra-platform.
+# txtOwnerId is set to the cluster name to prevent clusters overwriting
+# each other's records.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: saas-external-dns
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+            class: saas
+        values:
+          env:          "{{metadata.labels.environment}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "external-dns-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   external-dns
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        https://kubernetes-sigs.github.io/external-dns/
+          chart:          external-dns
+          targetRevision: "1.15.0"
+          helm:
+            releaseName: external-dns
+            # _default.yaml always loads; the per-environment file overrides it
+            # when one exists. ignoreMissingValueFiles means a cluster whose
+            # environment label has no profile falls back to the default instead
+            # of a permanent sync error — {{values.env}} is the env directory
+            # name, and provision-eks lets an operator name a cluster anything.
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - $values/charts/external-dns/values/_default.yaml
+              - $values/charts/external-dns/values/{{values.env}}.yaml
+            parameters:
+              - name:  txtOwnerId
+                value: "{{name}}"
+              # registry.k8s.io → ECR k8s/ pull-through cache
+              - name:  image.repository
+                value: "{{values.ecr_registry}}/k8s/external-dns/external-dns"
+
+        - repoURL:        https://github.com/ajay-infra/aj-gitops
+          targetRevision: v1.0.0
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: external-dns
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          # No CreateNamespace. The namespace is declared in
+          # aj-infra-platform/namespaces.tf, with the labels
+          # cost attribution and network policy both need. Creating it here
+          # would race that declaration and win with an UNLABELLED namespace,
+          # which Cilium then leaves unrestricted. A missing namespace should
+          # fail this sync loudly instead.
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m

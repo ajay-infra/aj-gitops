@@ -1,0 +1,79 @@
+# AppProject: workloads
+#
+# Owns all application workload Applications — frontend, backend, llm, search.
+# Separate from platform so app teams can't accidentally touch infra components.
+# Per-environment sync policies enforced here (auto-sync dev/staging, manual-gate prod).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: workloads
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Application workloads — frontend, backend, llm-router, search, rag-worker
+
+  sourceRepos:
+    # sourceRepos is an allow-list, so a stale entry is a standing grant. The
+    # aj-cluster-baseline repo was absorbed into aj-gitops and nothing points at
+    # it any more, but it still exists and was still trusted here.
+    - https://github.com/ajay-infra/aj-gitops
+
+  destinations:
+    # `*` is scoped by the HUB, not by this glob. A product hub holds
+    # only product cluster Secrets, so an Application here cannot name a
+    # cluster of the other class — there is no credential for one.
+    #
+    # This replaces globs on cluster NAMES ("https://ai-search-dev.*").
+    # The cluster Secret's `server` is the EKS API endpoint
+    # (https://A1B2C3.gr7.us-east-1.eks.amazonaws.com), which no such
+    # glob can ever match — every Application in this project would
+    # have been rejected at first sync with "destination is not
+    # permitted in project".
+    - namespace: "*"
+      server: "*"
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    # Karpenter NodePool + EC2NodeClass
+    - group: karpenter.sh
+      kind: NodePool
+    - group: karpenter.k8s.aws
+      kind: EC2NodeClass
+    # OPA Gatekeeper policies
+    - group: templates.gatekeeper.sh
+      kind: ConstraintTemplate
+    - group: constraints.gatekeeper.sh
+      kind: "*"
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  roles:
+    - name: dev-deployer
+      description: Auto-sync for dev + staging
+      policies:
+        - p, proj:workloads:dev-deployer, applications, sync, workloads/dev-*, allow
+        - p, proj:workloads:dev-deployer, applications, sync, workloads/staging-*, allow
+        - p, proj:workloads:dev-deployer, applications, get, workloads/*, allow
+      groups:
+        - ajay-infra:infra-core
+        - ajay-infra:engineers
+
+    - name: prod-deployer
+      description: Manual sync gate for prod
+      policies:
+        - p, proj:workloads:prod-deployer, applications, sync, workloads/prod-*, allow
+        - p, proj:workloads:prod-deployer, applications, *, workloads/*, allow
+      groups:
+        - ajay-infra:infra-lead
