@@ -1,5 +1,5 @@
 # ARC Runner Scale Set — dev cluster
-# Installed by ArgoCD ApplicationSet (applicationsets/workload/arc-runners.yaml)
+# Installed by ArgoCD ApplicationSet (applicationsets/workload/<class>/arc-runners.yaml)
 # Controller is installed by aj-infra-platform (install_arc = true)
 
 githubConfigUrl: "https://github.com/ajay-infra"

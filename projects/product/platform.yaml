@@ -1,0 +1,61 @@
+# AppProject: platform
+#
+# Owns all platform-layer Applications — ArgoCD itself, LGTM stack, Alloy.
+# Only the infra-lead team can sync platform apps (changes here affect all clusters).
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  description: Platform layer — ArgoCD, Grafana LGTM, Alloy, ARC, Cloudability
+
+  sourceRepos:
+    - https://github.com/ajay-infra/aj-gitops
+    # Upstream chart repos
+    - https://argoproj.github.io/argo-helm
+    - https://grafana.github.io/helm-charts
+    - https://apptio.github.io/apptio-cloudability-helm-charts
+    - oci://ghcr.io/actions/actions-runner-controller-charts
+
+  destinations:
+    # `*` is scoped by the HUB, not by this glob. A product hub holds
+    # only product cluster Secrets, so an Application here cannot name a
+    # cluster of the other class — there is no credential for one.
+    #
+    # This replaces globs on cluster NAMES ("https://ai-search-dev.*").
+    # The cluster Secret's `server` is the EKS API endpoint
+    # (https://A1B2C3.gr7.us-east-1.eks.amazonaws.com), which no such
+    # glob can ever match — every Application in this project would
+    # have been rejected at first sync with "destination is not
+    # permitted in project".
+    - namespace: "*"
+      server: "*"
+    - namespace: "*"
+      server: https://kubernetes.default.svc
+
+
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  roles:
+    - name: admin
+      description: Full access to platform project
+      policies:
+        - p, proj:platform:admin, applications, *, platform/*, allow
+      groups:
+        - ajay-infra:infra-lead

@@ -1,0 +1,137 @@
+# ── product hub only ───────────────────────────────────────────────────────────
+# This tree is synced by the product hubs and no other. Editing it cannot reach a
+# saas cluster: the saas hubs sync applicationsets/workload/saas/.
+#
+# The duplication is the isolation. A chart bump wanted on both sides is two
+# edits, deliberately — one model can be explored, broken and rolled back
+# without the other noticing.
+#
+# ApplicationSet — the baseline on all workload clusters
+#
+# Deploys aj-gitops/baseline/ to every ArgoCD-registered workload cluster.
+# Covers: OPA Gatekeeper policies (ConstraintTemplates + Constraints),
+#         Karpenter NodePools + EC2NodeClass, KEDA ScaledObjects, APISIX plugins,
+#         ExternalSecrets, Falcon DaemonSet, namespace definitions, PodDisruptionBudgets.
+#
+# Named for the repo it used to be, until 2026-08-31 — aj-cluster-baseline was
+# absorbed into aj-gitops as the baseline/ directory on 2026-08-30, and the
+# `path: baseline` below has said so since. Renaming an ApplicationSet is a
+# delete-and-recreate of every Application it generates, which is free today
+# because no cluster is registered, and is not free later.
+#
+# Sync policy mirrors bootstrap-workload.yml's argocd-register job:
+#   dev + staging: auto-sync (auto_sync=true on cluster Secret)
+#   prod:          manual sync (auto_sync=false)
+#
+# OPA enforcement mode per environment is encoded in the manifests themselves
+# (enforcementAction: warn → dev/staging; deny → prod). No per-env paths needed.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: product-baseline
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+            class: product
+        values:
+          env:      "{{metadata.labels.environment}}"
+          autoSync: "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "baseline-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   baseline
+        cluster:     "{{name}}"
+    spec:
+      project: workloads
+
+      source:
+        repoURL:        https://github.com/ajay-infra/aj-gitops
+        targetRevision: v1.0.0
+        # The baseline is a DIRECTORY in aj-gitops now, not a repo. Without
+        # this path the sync would recurse the entire monorepo — including
+        # every ApplicationSet, which ArgoCD would then try to apply to a
+        # workload cluster.
+        path: baseline
+        directory:
+          recurse: true   # deploy all YAML files in all subdirectories
+          # ...except the policy test fixtures, which are REAL manifests that
+          # exist to be fed to `gator`, not to be applied to a cluster. Several
+          # are deliberately non-compliant (privileged Pods, :latest tags, no
+          # resource limits) and `policies/tests/samples/acm-cert-compliant.yaml`
+          # is a live ACK ACM Certificate that would request an actual
+          # certificate from AWS.
+          #
+          # Without this exclude, recurse:true deploys all of them. They are
+          # inside the pinned v1.0.0 tag, so this was latent rather than
+          # theoretical — it simply has not fired because no cluster is
+          # provisioned yet. Found 2026-08-28 while adding deny-acm-exportable.
+          #
+          # ...and `apps/`, which does not belong to this sync model at all.
+          # Every other directory here is applied VERBATIM and identically to
+          # every cluster. `apps/` is kustomize: a base plus dev/staging/prod
+          # overlays, and `apps.yaml` already deploys the right overlay per
+          # cluster. Recursing it applies, to every cluster at once:
+          #
+          #   - the unpatched base
+          #   - all three environments' patch fragments, as standalone objects
+          #   - every kustomization.yaml, which is not a cluster resource
+          #
+          # The fragments are the dangerous part. `apps/frontend/overlays/prod/
+          # replicas-patch.yaml` carries apiVersion, kind, name and namespace,
+          # so it is not obviously a fragment — it reads as a Deployment named
+          # `frontend` with replicas 2 and NO pod template. This Application
+          # cannot sync it, and because ArgoCD syncs an Application as a unit,
+          # the constraints, namespaces and network policies alongside it do not
+          # land either. A broken app manifest would take the cluster's whole
+          # policy baseline down with it.
+          #
+          # Same bug as the line above, found the same way: recurse:true takes
+          # everything, and what it takes has to be checked directory by
+          # directory. Latent only because no cluster is provisioned.
+          exclude: "{policies/tests/**,apps/**}"
+
+      destination:
+        server:    "{{server}}"
+        namespace: default   # namespace-scoped resources use their own namespace declarations
+
+      syncPolicy:
+        automated:
+          prune:     "{{values.autoSync}}"
+          selfHeal:  "{{values.autoSync}}"
+        syncOptions:
+          # No CreateNamespace. The namespace is declared in
+          # the cluster itself (default always exists), with the labels
+          # cost attribution and network policy both need. Creating it here
+          # would race that declaration and win with an UNLABELLED namespace,
+          # which Cilium then leaves unrestricted. A missing namespace should
+          # fail this sync loudly instead.
+          - ServerSideApply=true   # required for CRD + Gatekeeper policy apply
+          - RespectIgnoreDifferences=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true
+        retry:
+          limit: 3
+          backoff:
+            duration: 30s
+            factor: 2
+            maxDuration: 5m
+
+      ignoreDifferences:
+        # Gatekeeper injects observedGeneration — ignore to prevent constant re-sync
+        - group: templates.gatekeeper.sh
+          kind: ConstraintTemplate
+          jsonPointers:
+            - /status
+        - group: constraints.gatekeeper.sh
+          kind: "*"
+          jsonPointers:
+            - /status

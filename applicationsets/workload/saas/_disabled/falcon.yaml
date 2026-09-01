@@ -1,0 +1,89 @@
+# ── saas hub only ───────────────────────────────────────────────────────────
+# This tree is synced by the saas hubs and no other. Editing it cannot reach a
+# product cluster: the product hubs sync applicationsets/workload/product/.
+#
+# The duplication is the isolation. A chart bump wanted on both sides is two
+# edits, deliberately — one model can be explored, broken and rolled back
+# without the other noticing.
+#
+# ⚠️ DISABLED — moved out of applicationsets/workload/ on 2026-08-24.
+# Reason: references $values/charts/falcon/values/{{env}}.yaml, but that directory
+# was never created — this ApplicationSet would fail to sync (missing Helm
+# valueFiles source). See CLAUDE.md Known Gaps for detail.
+#
+# ArgoCD's bootstrap-workload-platform Application (bootstrap/*.yaml) does NOT
+# recurse into subdirectories of applicationsets/workload/ (no directory.recurse
+# set), so this file is inert here — safe, reversible, no cluster impact.
+#
+# To re-enable: add real charts/falcon/values/<env>.yaml files (real config, not
+# fabricated — see CLAUDE.md for what each one needs), then move this file back
+# up to applicationsets/workload/saas/falcon.yaml.
+#
+# ApplicationSet — CrowdStrike Falcon sensor on all workload clusters
+#
+# Deploys Falcon DaemonSet to every node for runtime threat detection.
+# Requires ESO ExternalSecret "falcon-credentials" in falcon-system namespace
+# (provisioned by aj-infra-platform ESO + Secrets Manager) to exist before pods start.
+#
+# OPA Gatekeeper no-privileged-containers constraint in baseline/policies/ has an
+# exemption for the falcon-system namespace.
+# No IAM needed — Falcon calls CrowdStrike cloud endpoints over HTTPS, not AWS.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: saas-falcon
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+            class: saas
+        values:
+          env:          "{{metadata.labels.environment}}"
+          ecr_registry: "{{metadata.annotations.ecr_registry}}"
+          autoSync:     "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "falcon-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   falcon
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        https://crowdstrike.github.io/falcon-helm
+          chart:          falcon-sensor
+          targetRevision: "1.25.0"
+          helm:
+            releaseName: falcon-sensor
+            valueFiles:
+              - $values/charts/falcon/values/{{values.env}}.yaml
+
+        - repoURL:        https://github.com/ajay-infra/aj-gitops
+          targetRevision: v1.0.0
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: falcon-system
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m

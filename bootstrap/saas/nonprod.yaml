@@ -1,0 +1,85 @@
+# Bootstrap — central-saas-nonprod
+#
+# Apply ONCE after provision-central.yml + aj-infra-central complete:
+#   kubectl apply -f bootstrap/saas/nonprod.yaml
+#
+# Creates two Applications that drive everything else:
+#
+#   1. bootstrap-central-nonprod
+#      → applicationsets/central/saas/nonprod/   (LGTM stack on this cluster)
+#
+#   2. bootstrap-workload-saas
+#      → applicationsets/workload/saas/
+#         Only the saas tree. The other class's hubs sync their own, so an
+#         edit here cannot reach a cluster of the other class — and this hub
+#         holds no cluster Secret for one either.
+#
+# Everything after this is ArgoCD-managed. Upgrades = PRs to this repo.
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap-central-saas-nonprod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL:        https://github.com/ajay-infra/aj-gitops
+    targetRevision: v1.0.0
+    path:           applicationsets/central/saas/nonprod
+
+  destination:
+    server:    https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune:    true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration:    10s
+        factor:      2
+        maxDuration: 3m
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: bootstrap-workload-saas
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: platform
+
+  source:
+    repoURL:        https://github.com/ajay-infra/aj-gitops
+    targetRevision: v1.0.0
+    path:           applicationsets/workload/saas
+
+  destination:
+    server:    https://kubernetes.default.svc
+    namespace: argocd
+
+  syncPolicy:
+    automated:
+      prune:    true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+    retry:
+      limit: 5
+      backoff:
+        duration:    10s
+        factor:      2
+        maxDuration: 3m

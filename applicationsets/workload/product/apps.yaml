@@ -1,0 +1,106 @@
+# ── product hub only ───────────────────────────────────────────────────────────
+# This tree is synced by the product hubs and no other. Editing it cannot reach a
+# saas cluster: the saas hubs sync applicationsets/workload/saas/.
+#
+# The duplication is the isolation. A chart bump wanted on both sides is two
+# edits, deliberately — one model can be explored, broken and rolled back
+# without the other noticing.
+#
+# ApplicationSet — Application workloads across all workload clusters
+#
+# Matrix generator: clusters × app components
+# Generates one Application per (cluster, component) pair.
+# Manifests live in baseline/apps/, organized by component + environment.
+#
+# Sync policy: auto-sync for dev/staging, manual gate for prod.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: product-apps
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          # All registered workload clusters
+          - clusters:
+              selector:
+                matchLabels:
+                  tier: workload
+                  class: product
+              values:
+                env: "{{metadata.labels.environment}}"
+                # Determine sync policy from environment label
+                autoSync: "{{metadata.labels.auto_sync}}"  # set true on dev/staging cluster secrets
+
+          # App components to deploy on every cluster
+          - list:
+              elements:
+                - component: frontend
+                  namespace: frontend
+                  path: "baseline/apps/frontend"
+
+                - component: backend
+                  namespace: backend
+                  path: "baseline/apps/backend"
+
+                - component: llm-router
+                  namespace: llm
+                  path: "baseline/apps/llm-router"
+
+                - component: searxng
+                  namespace: search
+                  path: "baseline/apps/searxng"
+
+                - component: rag-worker
+                  namespace: backend
+                  path: "baseline/apps/rag-worker"
+
+  template:
+    metadata:
+      name: "{{values.env}}-{{component}}-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component: "{{component}}"
+        cluster: "{{name}}"
+    spec:
+      project: workloads
+
+      source:
+        repoURL: https://github.com/ajay-infra/aj-gitops
+        targetRevision: v1.0.0
+        path: "{{path}}/overlays/{{values.env}}"
+
+      destination:
+        server: "{{server}}"
+        namespace: "{{namespace}}"
+
+      syncPolicy:
+        # dev + staging: auto-sync. prod: manual.
+        # Controlled by cluster Secret label auto_sync=true|false set during argocd-register.
+        automated:
+          prune: "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        syncOptions:
+          # No CreateNamespace. Namespaces come from aj-namespace-registry via
+          # the workload-namespaces ApplicationSet, which renders them with the
+          # labels cost attribution and network policy both need, at sync-wave
+          # -1 so they exist before this Application runs.
+          #
+          # Creating one here would race that and win with an UNLABELLED
+          # namespace, which Cilium then leaves unrestricted.
+          #
+          # `llm` and `search` are why this matters: apps.yaml deploys into
+          # them and NO repo declared them, so they were being created here,
+          # bare. Fixed by the registry, not by putting the option back.
+          - ServerSideApply=true
+          - PrunePropagationPolicy=foreground
+          - PruneLast=true  # delete old resources only after new ones are healthy
+        retry:
+          limit: 3
+          backoff:
+            duration: 30s
+            factor: 2
+            maxDuration: 5m

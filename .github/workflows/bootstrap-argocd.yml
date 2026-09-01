@@ -15,6 +15,12 @@ name: Bootstrap ArgoCD
 on:
   workflow_dispatch:
     inputs:
+      class:
+        description: "Which hub — product and saas have separate hubs and separate trees"
+        required: true
+        type: choice
+        options: [product, saas]
+        default: product
       tier:
         description: "Central cluster tier"
         required: true
@@ -125,7 +131,7 @@ jobs:
 
           echo ""
           echo "Bootstrap applied. ArgoCD will now sync:"
-          echo "  applicationsets/central/${{ inputs.tier }}/lgtm.yaml"
+          echo "  applicationsets/central/${{ inputs.class }}/${{ inputs.tier }}/lgtm.yaml"
           echo ""
           echo "Monitor sync status:"
           echo "  kubectl get applications -n argocd"

@@ -268,8 +268,8 @@ labels:
 1. provision-central.yml  → central EKS cluster up
 2. bootstrap-argocd.yml (action: install)
      → helm install ArgoCD
-     → kubectl apply projects/platform.yaml
-     → kubectl apply projects/workloads.yaml
+     → kubectl apply projects/<class>/platform.yaml
+     → kubectl apply projects/<class>/workloads.yaml
      → kubectl apply bootstrap/<tier>.yaml
 3. ArgoCD syncs lgtm.yaml → installs Grafana + Loki + Mimir + Tempo
 4. provision-eks.yml      → workload cluster up + registered with ArgoCD
@@ -374,3 +374,48 @@ directory:
 also holds test fixtures will deploy the fixtures. Any repo added to an
 ApplicationSet this way needs checking for files that are valid Kubernetes
 objects but are not meant to exist in a cluster.
+
+
+---
+
+## Class isolation — why this tree is duplicated
+
+`applicationsets/workload/` and `projects/` exist twice, once per class. That is
+deliberate and it is the whole point.
+
+**What it replaces.** Every workload ApplicationSet used to select on
+`tier: workload` and nothing else, while the cluster Secret written by
+`bootstrap-workload.yml` carries `class`, `customer`, `kind` and `stage`. No
+selector read any of them. A SaaS cluster would have inherited the entire
+product platform stack the moment it registered, and every edit to any
+ApplicationSet reached both models in the same sync.
+
+**Two boundaries, not one.**
+
+1. *Credentials.* Each hub is its own cluster and holds only its own class's
+   cluster Secrets. A product hub has no credential for a SaaS cluster, so it
+   cannot sync to one whatever a manifest says.
+2. *Config.* Each hub's bootstrap points at `applicationsets/workload/<class>/`
+   only. Editing the SaaS keda ApplicationSet cannot change the product one,
+   because they are different files.
+
+The first alone is not enough: separate hubs syncing one shared directory still
+means one merge changes both models at once.
+
+**The cost, stated so nobody rediscovers it as a surprise.** A chart bump wanted
+on both sides is two edits. The trees will drift, and drift is the feature — one
+model can be explored, broken and rolled back without the other noticing. If you
+find yourself copying every change across, that is the signal the split is not
+earning its keep, not a reason to script the copying.
+
+`class: <class>` is also on every selector. Redundant while each hub holds only
+its own Secrets — kept because a mis-registration should fail to match rather
+than spread.
+
+**AppProject destinations are `server: "*"`, scoped by the hub.** They used to be
+globs on cluster names (`https://ai-search-dev.*`). The Secret's `server` is the
+EKS API endpoint (`https://A1B2C3.gr7.us-east-1.eks.amazonaws.com`), which no
+such glob can match — every Application in the `workloads` project would have
+been rejected at first sync with "destination is not permitted in project". The
+hub split makes `*` the honest answer: there is no credential for the other
+class to reach.
