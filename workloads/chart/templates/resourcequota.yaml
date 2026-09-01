@@ -1,0 +1,24 @@
+{{- $tier := .Values.quota -}}
+{{- if and $tier (ne $tier "none") }}
+{{- $q := index .Values.quotas $tier }}
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: {{ .Values.namespace }}-quota
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "ns.labels" . | nindent 4 }}
+  annotations:
+    # The tier name, not the numbers, is the reviewable decision. Changing what
+    # `medium` means is one edit in the chart; changing which tier a namespace
+    # is on is one edit in its registry entry.
+    platform.aj/quota-tier: {{ $tier | quote }}
+spec:
+  hard:
+    requests.cpu:    {{ $q.requests.cpu | quote }}
+    requests.memory: {{ $q.requests.memory | quote }}
+    limits.cpu:      {{ $q.limits.cpu | quote }}
+    limits.memory:   {{ $q.limits.memory | quote }}
+    pods:            {{ $q.pods | quote }}
+{{- end }}

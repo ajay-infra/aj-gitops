@@ -1,0 +1,10 @@
+# product/internal/staging/backend
+#
+# class, customer and cluster are NOT repeated here — they are the path. A field
+# that appears in both places is a field that can disagree with itself.
+#
+# This file carries only what the path cannot say.
+team:        product
+segment:     app
+podSecurity: restricted
+quota:       large
