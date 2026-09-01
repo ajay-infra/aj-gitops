@@ -144,9 +144,9 @@ Mutation policies (image rewrites) apply on ALL environments. Developers write `
       task: ExternalSecrets don't hold secret material client-side, they hold a
       `remoteRef.key` pointing at a Secrets Manager ARN, so there's nothing in them for
       SOPS to encrypt. What's actually still open: `.sops.yaml`'s `kms:` entries are all
-      `REPLACE_WITH_*_SOPS_KEY_ID` placeholders (real ARNs come from `aj-tf-module-scps`
+      MOCK KMS ARNs — invented accounts and key ids (real ARNs come from `aj-tf-module-scps`
       outputs), and every `external-secrets/*.yaml`'s `remoteRef.key` is still
-      `REPLACE_WITH_*_SECRET_ARN` (real ARNs come from `aj-tf-module-aurora`/`aj-tf-module-valkey`
+      MOCK Secrets Manager ARNs (real ARNs come from `aj-tf-module-aurora`/`aj-tf-module-valkey`
       outputs). Also note `.sops.yaml`'s `path_regex` patterns target `envs/dev|staging|prod/*.yaml`,
       but no `envs/` directory exists in this repo yet either.
 - [ ] Fill in real KMS key ARNs in `.sops.yaml` (from `aj-tf-module-scps`) and real Secrets

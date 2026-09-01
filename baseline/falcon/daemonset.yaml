@@ -33,7 +33,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: falcon-sensor
-          image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/falcon-sensor:REPLACE_WITH_TAG
+          image: 555555555555.dkr.ecr.us-east-1.amazonaws.com/falcon-sensor:7.26.0-16811  # MOCK tag
           imagePullPolicy: Always
           securityContext:
             privileged: true

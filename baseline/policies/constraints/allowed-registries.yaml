@@ -20,4 +20,4 @@ spec:
       #   - Private app repos (e.g. 123456789012.dkr.ecr.us-east-1.amazonaws.com/frontend:v1)
       #   - Pull-through cache (dockerhub/, quay/, ghcr/, k8s/, ecr-public/ all share this prefix)
       # Replace ACCOUNT_ID and REGION with real values from aj-tf-module-ecr outputs.
-      - "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+      - "555555555555.dkr.ecr.us-east-1.amazonaws.com"

@@ -51,7 +51,7 @@ None — this repo has no Terraform, nothing here creates AWS resources directly
 ## Depends on
 `aj-tf-module-scps` — SOPS KMS key ARNs (not yet filled into `.sops.yaml`).
 `aj-tf-module-aurora` / `aj-tf-module-valkey` — Secrets Manager ARNs (not yet filled
-into `external-secrets/*.yaml`, currently `REPLACE_WITH_*_SECRET_ARN` placeholders).
+into `external-secrets/*.yaml`, currently MOCK ARNs marked as such).
 `aj-tf-module-ecr` — pull-through cache prefixes referenced by `policies/mutations/*.yaml`.
 
 ## Branching convention
@@ -66,7 +66,7 @@ default schema and are skipped via `-ignore-missing-schemas`), OPA Rego lint on 
 
 ## Agentic capabilities
 - Detect a `ci.yml` path reference to a directory that doesn't exist (caught this once already — see CHANGELOG)
-- Flag any `REPLACE_WITH_*` placeholder still present in a file about to be relied on
+- Flag any MOCK value or `REPLACE_WITH_*` placeholder still present in a file about to be relied on
 - Validate new OPA Constraints start in `warn` mode, not `deny`
 - Check Karpenter NodePool/EC2NodeClass changes don't duplicate what belongs in `aj-tf-module-eks` (that module explicitly excludes Karpenter resources — GitOps-managed here instead)
 - Cross-check `rbac/` presence here against whether `aj-infra-rbac/apply.yml` has actually been run with `target=k8s` yet

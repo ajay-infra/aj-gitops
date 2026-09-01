@@ -1,3 +1,6 @@
+# MOCK KMS key ARNs — the accounts and key ids are invented. Real ones are
+# outputs of aj-tf-module-scps, which creates one SOPS key per environment.
+# sops will fail to encrypt against these; that is correct until the keys exist.
 # SOPS key mapping — maps file path patterns to KMS key ARNs per environment.
 # KMS key ARNs come from aj-tf-module-scps outputs (sops_kms_key_arns).
 # Run `sops -e -i <file>` to encrypt; ArgoCD ksops plugin decrypts at render time.
@@ -7,10 +10,10 @@
 
 creation_rules:
   - path_regex: envs/dev/.*\.yaml
-    kms: arn:aws:kms:us-east-1:REPLACE_WITH_DEV_ACCOUNT:key/REPLACE_WITH_DEV_SOPS_KEY_ID
+    kms: arn:aws:kms:us-east-1:222222222222:key/1111aaaa-1111-1111-1111-111111111111
 
   - path_regex: envs/staging/.*\.yaml
-    kms: arn:aws:kms:us-east-1:REPLACE_WITH_STAGING_ACCOUNT:key/REPLACE_WITH_STAGING_SOPS_KEY_ID
+    kms: arn:aws:kms:us-east-1:333333333333:key/2222bbbb-2222-2222-2222-222222222222
 
   - path_regex: envs/prod/.*\.yaml
-    kms: arn:aws:kms:us-east-1:REPLACE_WITH_PROD_ACCOUNT:key/REPLACE_WITH_PROD_SOPS_KEY_ID
+    kms: arn:aws:kms:us-east-1:444444444444:key/3333cccc-3333-3333-3333-333333333333
