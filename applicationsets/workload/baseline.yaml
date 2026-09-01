@@ -1,11 +1,17 @@
-# ApplicationSet — aj-cluster-baseline on all workload clusters
+# ApplicationSet — the baseline on all workload clusters
 #
-# Deploys the full aj-cluster-baseline repo to every ArgoCD-registered workload cluster.
+# Deploys aj-gitops/baseline/ to every ArgoCD-registered workload cluster.
 # Covers: OPA Gatekeeper policies (ConstraintTemplates + Constraints),
-#         Karpenter NodePools + EC2NodeClass, KEDA ScaledObjects, Kong plugins,
+#         Karpenter NodePools + EC2NodeClass, KEDA ScaledObjects, APISIX plugins,
 #         ExternalSecrets, Falcon DaemonSet, namespace definitions, PodDisruptionBudgets.
 #
-# Sync policy mirrors provision-eks.yml argocd-register:
+# Named for the repo it used to be, until 2026-08-31 — aj-cluster-baseline was
+# absorbed into aj-gitops as the baseline/ directory on 2026-08-30, and the
+# `path: baseline` below has said so since. Renaming an ApplicationSet is a
+# delete-and-recreate of every Application it generates, which is free today
+# because no cluster is registered, and is not free later.
+#
+# Sync policy mirrors bootstrap-workload.yml's argocd-register job:
 #   dev + staging: auto-sync (auto_sync=true on cluster Secret)
 #   prod:          manual sync (auto_sync=false)
 #
@@ -15,7 +21,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: workload-aj-cluster-baseline
+  name: workload-baseline
   namespace: argocd
 spec:
   generators:
@@ -29,11 +35,11 @@ spec:
 
   template:
     metadata:
-      name: "aj-cluster-baseline-{{name}}"
+      name: "baseline-{{name}}"
       namespace: argocd
       labels:
         environment: "{{values.env}}"
-        component:   aj-cluster-baseline
+        component:   baseline
         cluster:     "{{name}}"
     spec:
       project: workloads

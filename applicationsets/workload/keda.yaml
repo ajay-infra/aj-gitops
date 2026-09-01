@@ -1,7 +1,7 @@
 # ApplicationSet — KEDA on all workload clusters
 #
 # Pod Identity IAM (SQS + CloudWatch) is provisioned by aj-infra-platform.
-# ScaledObject CRDs live in aj-cluster-baseline. Do NOT use HPA + KEDA on the
+# ScaledObject CRDs live in baseline/keda/. Do NOT use HPA + KEDA on the
 # same Deployment.
 ---
 apiVersion: argoproj.io/v1alpha1

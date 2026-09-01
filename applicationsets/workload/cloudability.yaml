@@ -72,7 +72,7 @@ spec:
           prune:    "{{values.autoSync}}"
           selfHeal: "{{values.autoSync}}"
         # ArgoCD installs Cloudability from a remote chart and its manifests do
-        # not live in aj-cluster-baseline — the repo only ever declared the
+        # not live in baseline/ — that directory only ever declared the
         # namespace, which was the wrong owner under the rule that the mechanism
         # INSTALLING a component declares its namespace. Corrected 2026-08-29:
         # ArgoCD declares it, natively, with labels.

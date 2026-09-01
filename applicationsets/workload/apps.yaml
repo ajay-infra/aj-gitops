@@ -2,7 +2,7 @@
 #
 # Matrix generator: clusters × app components
 # Generates one Application per (cluster, component) pair.
-# Manifests live in aj-cluster-baseline repo, organized by component + environment.
+# Manifests live in baseline/apps/, organized by component + environment.
 #
 # Sync policy: auto-sync for dev/staging, manual gate for prod.
 ---
