@@ -15,6 +15,24 @@
 #         holds no cluster Secret for one either.
 #
 # Everything after this is ArgoCD-managed. Upgrades = PRs to this repo.
+#
+# ── BEFORE YOU RUN THIS ───────────────────────────────────────────────────────
+#
+# The SaaS tree is DORMANT until someone applies this file. Dormant means its
+# chart versions, targetRevision pins and versions.yaml entries froze on the day
+# the class split was made and have not moved since — nobody upgrades what
+# nobody runs.
+#
+# So this is not a straight apply. It is an activation, and the version review
+# comes first:
+#
+#   1. Diff this tree's chart versions against the product tree's. Product has
+#      been maintained; this one has not. Differences are age, not intent.
+#   2. Check each pinned chart for advisories published since the freeze.
+#   3. Bump what needs bumping, merge that, THEN apply this.
+#
+# The tree tells you the SHAPE of a SaaS hub. It does not tell you the versions
+# are current, and it will look completely healthy while being months stale.
 
 ---
 apiVersion: argoproj.io/v1alpha1

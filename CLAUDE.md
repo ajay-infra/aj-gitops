@@ -402,11 +402,27 @@ ApplicationSet reached both models in the same sync.
 The first alone is not enough: separate hubs syncing one shared directory still
 means one merge changes both models at once.
 
-**The cost, stated so nobody rediscovers it as a surprise.** A chart bump wanted
-on both sides is two edits. The trees will drift, and drift is the feature — one
-model can be explored, broken and rolled back without the other noticing. If you
-find yourself copying every change across, that is the signal the split is not
-earning its keep, not a reason to script the copying.
+**One model runs at a time.** This is not two businesses operated in parallel
+that must be kept in step — it is one business you have committed to, with the
+other tree dormant. If both ever run they are separate offerings with separate
+chargeback, and matching versions is not a goal.
+
+So the duplication has no ongoing cost. There is no "both sides" to bump: you
+change the tree you are running, and the other one sits still.
+
+**What that does mean is that a dormant tree is a SNAPSHOT, not a maintained
+thing.** Chart versions, `targetRevision` pins and `versions.yaml` entries for
+the inactive class freeze at the day the split was made, and keep freezing.
+Activating that class later is not `apply` — every pin in it is as old as the
+last time anyone looked, including ones with CVEs published since.
+
+Treat activation as a version review: read the pins, bump what needs bumping,
+then apply. The tree tells you what the shape is, not what is current.
+
+The same applies to the hubs. `envs/central/<class>/` in aj-infra holds tfvars
+for four hubs; provisioning is a separate act. An unprovisioned hub costs
+nothing, so a dormant class costs nothing — run the pipeline for the class you
+are actually operating.
 
 `class: <class>` is also on every selector. Redundant while each hub holds only
 its own Secrets — kept because a mis-registration should fail to match rather
