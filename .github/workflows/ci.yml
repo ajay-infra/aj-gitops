@@ -49,10 +49,28 @@ jobs:
       - name: ApplicationSets, projects, bootstrap and baseline
         # -ignore-missing-schemas skips CRDs not in the default schema set
         # (ApplicationSet, AppProject, CiliumNetworkPolicy, NodePool, …).
+        #
+        # `find`, not shell globs. This was:
+        #
+        #   applicationsets/**/*.yaml bootstrap/*.yaml projects/*.yaml
+        #
+        # bash does not expand `**` unless globstar is set, so that first
+        # pattern only ever matched depth 2 — it was validating a subset and
+        # reporting success. The class split moved every file a level deeper and
+        # turned the silent subset into a loud failure, which is the only reason
+        # it was noticed. Depth-independent now.
         run: |
+          FILES="$(find applicationsets bootstrap projects -name '*.yaml' -type f | sort)"
+          COUNT="$(printf '%s\n' "$FILES" | grep -c . || true)"
+          echo "validating $COUNT manifest(s)"
+          if [ "$COUNT" -lt 20 ]; then
+            echo "::error::only $COUNT manifests found — the search is matching"
+            echo "::error::less than the tree holds. Refusing to report success."
+            exit 1
+          fi
+          # shellcheck disable=SC2086
           kubeconform -schema-location default -ignore-missing-schemas -summary \
-            applicationsets/**/*.yaml bootstrap/*.yaml projects/*.yaml \
-            baseline/falcon/
+            $FILES baseline/falcon/
 
   policy:
     name: Policy — gator, rego, and every real namespace
