@@ -25,7 +25,7 @@ close that gap for $0, see
 you can watch a real admission rejection.
 
 > Expect `allowed-registries` to behave surprisingly there: it pins the literal
-> placeholder `REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com`, so in a
+> placeholder `555555555555.dkr.ecr.us-east-1.amazonaws.com`, so in a
 > live cluster it denies every image whose registry isn't that literal string.
 
 ## Adding a case

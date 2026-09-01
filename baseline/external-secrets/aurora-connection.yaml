@@ -17,25 +17,25 @@ spec:
   data:
     - secretKey: host
       remoteRef:
-        key: REPLACE_WITH_AURORA_SECRET_ARN # from aj-tf-module-aurora output
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:aurora/app-credentials-MOCK01 # MOCK — real ARN from aj-tf-module-aurora output
         property: host
     - secretKey: reader_host
       remoteRef:
-        key: REPLACE_WITH_AURORA_SECRET_ARN
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:aurora/app-credentials-MOCK01
         property: reader_host
     - secretKey: port
       remoteRef:
-        key: REPLACE_WITH_AURORA_SECRET_ARN
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:aurora/app-credentials-MOCK01
         property: port
     - secretKey: dbname
       remoteRef:
-        key: REPLACE_WITH_AURORA_SECRET_ARN
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:aurora/app-credentials-MOCK01
         property: dbname
     - secretKey: username
       remoteRef:
-        key: REPLACE_WITH_AURORA_SECRET_ARN
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:aurora/app-credentials-MOCK01
         property: username
     - secretKey: region
       remoteRef:
-        key: REPLACE_WITH_AURORA_SECRET_ARN
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:aurora/app-credentials-MOCK01
         property: region

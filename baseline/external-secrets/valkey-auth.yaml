@@ -16,17 +16,17 @@ spec:
   data:
     - secretKey: host
       remoteRef:
-        key: REPLACE_WITH_VALKEY_SECRET_ARN # from aj-tf-module-valkey output
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:valkey/auth-token-MOCK02 # MOCK — real ARN from aj-tf-module-valkey output
         property: host
     - secretKey: port
       remoteRef:
-        key: REPLACE_WITH_VALKEY_SECRET_ARN
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:valkey/auth-token-MOCK02
         property: port
     - secretKey: auth_token
       remoteRef:
-        key: REPLACE_WITH_VALKEY_SECRET_ARN
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:valkey/auth-token-MOCK02
         property: auth_token
     - secretKey: tls_enabled
       remoteRef:
-        key: REPLACE_WITH_VALKEY_SECRET_ARN
+        key: arn:aws:secretsmanager:us-east-1:444444444444:secret:valkey/auth-token-MOCK02
         property: tls_enabled

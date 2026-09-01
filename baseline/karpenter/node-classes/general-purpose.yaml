@@ -1,3 +1,19 @@
+# ── REPLACE_WITH_CLUSTER_NAME is deliberately NOT mocked ─────────────────────
+#
+# Every other placeholder in this repo took a mock value so plans and reviews are
+# real. This one cannot. `baseline/` is synced VERBATIM to every registered
+# cluster by applicationsets/workload/<class>/baseline.yaml — one directory, one
+# copy, no templating — so any single value here is wrong on every cluster it is
+# not right for.
+#
+# A mock would be worse than the placeholder: `karpenter.sh/discovery` is how
+# Karpenter finds its subnets and security groups, and a name that matches the
+# wrong cluster is how nodes launch into someone else's network. The placeholder
+# fails loudly; a plausible wrong name does not.
+#
+# The fix is templating, not substitution — the baseline needs to render per
+# cluster (Helm or kustomize under the ApplicationSet) before these can hold a
+# value. Tracked as finding #1 in the estate catalog: per-cluster node classes.
 # EC2NodeClass — shared by all NodePools.
 # CLUSTER_NAME is injected via ArgoCD ApplicationSet parameters at sync time.
 apiVersion: karpenter.k8s.aws/v1

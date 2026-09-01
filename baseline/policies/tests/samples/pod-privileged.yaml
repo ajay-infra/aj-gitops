@@ -4,6 +4,6 @@ metadata: {name: bad-priv, namespace: frontend}
 spec:
   containers:
     - name: app
-      image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/frontend:v1
+      image: 555555555555.dkr.ecr.us-east-1.amazonaws.com/frontend:v1
       securityContext:
         privileged: true

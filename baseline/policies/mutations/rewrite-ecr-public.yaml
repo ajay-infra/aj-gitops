@@ -14,7 +14,7 @@ spec:
     scope: Namespaced
   location: "spec.containers[name:*].image"
   parameters:
-    assignDomain: "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+    assignDomain: "555555555555.dkr.ecr.us-east-1.amazonaws.com"
     assignPath: "ecr-public"
     pathTests:
       - subPath: "domain"
@@ -35,7 +35,7 @@ spec:
     scope: Namespaced
   location: "spec.initContainers[name:*].image"
   parameters:
-    assignDomain: "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+    assignDomain: "555555555555.dkr.ecr.us-east-1.amazonaws.com"
     assignPath: "ecr-public"
     pathTests:
       - subPath: "domain"

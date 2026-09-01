@@ -6,7 +6,7 @@ metadata: {name: bad-init, namespace: frontend}
 spec:
   initContainers:
     - name: setup
-      image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/setup:latest
+      image: 555555555555.dkr.ecr.us-east-1.amazonaws.com/setup:latest
   containers:
     - name: app
-      image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/frontend:v1
+      image: 555555555555.dkr.ecr.us-east-1.amazonaws.com/frontend:v1
