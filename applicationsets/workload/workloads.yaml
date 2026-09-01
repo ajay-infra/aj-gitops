@@ -35,7 +35,11 @@ spec:
         generators:
           - git:
               repoURL: https://github.com/ajay-infra/aj-gitops
-              revision: main
+              # Pinned like every other ApplicationSet. It floated on `main`
+              # from the day it was written, so one merge reached every cluster
+              # at once with no staged rollout — the exact property the pins
+              # exist to prevent.
+              revision: v1.0.0
               files:
                 - path: "workloads/registry/*/*/*/*/namespace.yaml"
           - clusters:
@@ -65,7 +69,7 @@ spec:
 
       sources:
         - repoURL: https://github.com/ajay-infra/aj-gitops
-          targetRevision: main
+          targetRevision: v1.0.0
           path: workloads/chart
           helm:
             releaseName: "ns-{{index .path.segments 5}}"
@@ -83,7 +87,7 @@ spec:
               - $values/{{.path.path}}/namespace.yaml
 
         - repoURL: https://github.com/ajay-infra/aj-gitops
-          targetRevision: main
+          targetRevision: v1.0.0
           ref: values
 
       destination:
