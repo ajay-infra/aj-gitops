@@ -35,7 +35,7 @@ template:
         chart: <chart>
         helm:
           valueFiles: ["$values/charts/<name>/values/{{values.env}}.yaml"]
-      - repoURL: https://github.com/ajay-infra/aj-platform-gitops
+      - repoURL: https://github.com/ajay-infra/aj-gitops
         targetRevision: main
         ref: values
 ```

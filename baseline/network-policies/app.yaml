@@ -1,0 +1,56 @@
+# app — workload pods.
+#
+# Selects on the namespace label, so a newly labelled namespace is segmented
+# without editing this file. See edge.yaml for why the hardcoded-namespace
+# version was fail-open.
+#
+# The important property is what is ABSENT from ingress: `app` is reachable from
+# `edge` and from other `app` namespaces, and from nothing else. Not from the
+# internet, and not from `platform`.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: segment-app
+spec:
+  endpointSelector:
+    matchLabels:
+      io.cilium.k8s.namespace.labels.platform.aj/segment: app
+
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            io.cilium.k8s.namespace.labels.platform.aj/segment: edge
+
+    # Same-segment east-west. Broader than ideal — a per-namespace split would
+    # be tighter, but that is a decision for when real services exist rather
+    # than a guess now.
+    - fromEndpoints:
+        - matchLabels:
+            io.cilium.k8s.namespace.labels.platform.aj/segment: app
+
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: monitoring
+
+  egress:
+    # To `data` and only to `data`. `app` has no route to the data subnets
+    # itself — see data.yaml for why that boundary is real rather than declared.
+    - toEndpoints:
+        - matchLabels:
+            io.cilium.k8s.namespace.labels.platform.aj/segment: data
+
+    - toEndpoints:
+        - matchLabels:
+            io.cilium.k8s.namespace.labels.platform.aj/segment: app
+
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+          rules:
+            dns:
+              - matchPattern: "*"

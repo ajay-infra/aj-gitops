@@ -1,0 +1,59 @@
+# data — the only segment permitted to reach Aurora and Valkey.
+#
+# ── Two boundaries, and only one of them is enforced here ───────────────────
+# This policy stops *pods* reaching the data-access pods. It does NOT stop a pod
+# reaching Aurora, because Aurora is not a pod — it is an endpoint in the data
+# subnets, and pod-to-CIDR egress is the weaker half.
+#
+# The boundary that holds is the SECURITY GROUP: Aurora accepts connections only
+# from a group carried by nodes in the `data` NodePool. A pod on any other node
+# cannot connect regardless of what this file says. See
+# karpenter/node-classes/data-access.yaml.
+#
+# That is why `data` is a segment with its own node pool rather than only a
+# label. Network policy expresses intent; the security group enforces it.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: segment-data
+spec:
+  endpointSelector:
+    matchLabels:
+      io.cilium.k8s.namespace.labels.platform.aj/segment: data
+
+  ingress:
+    # From `app` only. Not from `edge` — a gateway has no business holding a
+    # database connection — and not from `platform`.
+    - fromEndpoints:
+        - matchLabels:
+            io.cilium.k8s.namespace.labels.platform.aj/segment: app
+
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: monitoring
+
+  egress:
+    # ⚠ PLACEHOLDER CIDR. The data VPC does not exist — aj-tf-module-aurora has
+    # no consumer (aj-infra-context#15) and the first real one is Keycloak's
+    # database (#24). The /8 below is deliberately obvious so it cannot be
+    # mistaken for a considered value.
+    - toCIDR:
+        - 10.0.0.0/8
+      toPorts:
+        - ports:
+            - port: "5432"
+              protocol: TCP
+            - port: "6379"
+              protocol: TCP
+
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+          rules:
+            dns:
+              - matchPattern: "*"

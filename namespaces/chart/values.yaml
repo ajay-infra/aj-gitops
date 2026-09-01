@@ -1,0 +1,46 @@
+# Defaults are deliberately INVALID where a value must be stated.
+#
+# Every field below that carries a real decision defaults to empty and fails the
+# template with a named error. The alternative — a plausible default — is how a
+# namespace ends up labelled `internal` because nobody chose, which is exactly
+# the ambiguity the reserved words `pooled` and `internal` were introduced to
+# remove. A default that is merely plausible cannot be told from a decision.
+namespace: ""
+
+identity:
+  team: ""
+  class: ""
+  customer: ""
+  segment: ""
+  # SaaS only. Empty on every other class, and the template rejects it there.
+  productLine: ""
+
+guardrails:
+  # restricted | baseline | privileged. `audit` and `warn` are pinned to
+  # restricted regardless, so raising `enforce` never lowers what gets logged.
+  podSecurity: restricted
+  # Key into .Values.quotas below, or `none`.
+  quota: ""
+
+# Quota tiers. A namespace names a tier; it does not write numbers. One place to
+# change what "medium" means, and no namespace can invent its own shape.
+quotas:
+  small:
+    requests: { cpu: "2",  memory: 4Gi }
+    limits:   { cpu: "4",  memory: 8Gi }
+    pods: "20"
+  medium:
+    requests: { cpu: "8",  memory: 16Gi }
+    limits:   { cpu: "16", memory: 32Gi }
+    pods: "60"
+  large:
+    requests: { cpu: "24", memory: 48Gi }
+    limits:   { cpu: "48", memory: 96Gi }
+    pods: "150"
+
+# Applied to every container that does not set its own. require-resource-limits
+# in aj-cluster-baseline REJECTS a container with no limits, so without a
+# LimitRange every chart that omits them fails admission.
+defaultContainerResources:
+  requests: { cpu: 50m,  memory: 64Mi }
+  limits:   { cpu: "1",  memory: 1Gi }

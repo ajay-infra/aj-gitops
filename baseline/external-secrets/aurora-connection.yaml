@@ -1,0 +1,41 @@
+# ExternalSecret — Aurora connection config (host, port, dbname, username, region).
+# Note: no password field — app uses RDS IAM auth (15-min rotating token via Pod Identity).
+# Secret ARN comes from aj-tf-module-aurora output: secret_arn
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: aurora-connection
+  namespace: backend
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+  target:
+    name: aurora-connection
+    creationPolicy: Owner
+  data:
+    - secretKey: host
+      remoteRef:
+        key: REPLACE_WITH_AURORA_SECRET_ARN # from aj-tf-module-aurora output
+        property: host
+    - secretKey: reader_host
+      remoteRef:
+        key: REPLACE_WITH_AURORA_SECRET_ARN
+        property: reader_host
+    - secretKey: port
+      remoteRef:
+        key: REPLACE_WITH_AURORA_SECRET_ARN
+        property: port
+    - secretKey: dbname
+      remoteRef:
+        key: REPLACE_WITH_AURORA_SECRET_ARN
+        property: dbname
+    - secretKey: username
+      remoteRef:
+        key: REPLACE_WITH_AURORA_SECRET_ARN
+        property: username
+    - secretKey: region
+      remoteRef:
+        key: REPLACE_WITH_AURORA_SECRET_ARN
+        property: region

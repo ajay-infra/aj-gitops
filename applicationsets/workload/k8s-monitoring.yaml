@@ -57,7 +57,7 @@ spec:
               - name: alloy.image.repository
                 value: "{{values.ecr_registry}}/dockerhub/grafana/alloy"
 
-        - repoURL: https://github.com/ajay-infra/aj-platform-gitops
+        - repoURL: https://github.com/ajay-infra/aj-gitops
           targetRevision: v1.0.0
           ref: values
 

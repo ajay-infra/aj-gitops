@@ -1,0 +1,56 @@
+# platform — cluster add-ons.
+#
+# The rule worth stating: **`platform` is not reachable from `app`.** These
+# components hold the credentials and make the decisions that constrain
+# workloads — OPA authorizes every API request, External Secrets reads secrets,
+# cert-manager holds Route53 write access. A compromised workload must not have
+# a network path to the process deciding whether it is permitted to act.
+#
+# The single exception is OPA, reachable from `edge` only, because that is the
+# authorization call path.
+#
+# Scoped to the OPA namespace rather than the whole `platform` segment: the
+# other add-ons have varied and mostly cluster-internal traffic patterns, and a
+# blanket policy over all of them would either be too loose to mean anything or
+# would break something on first contact. OPA is the one with a well-defined
+# call path, so it is the one worth constraining first.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: segment-platform-opa
+  namespace: opa
+spec:
+  endpointSelector: {}
+
+  ingress:
+    # The one deliberate hole in the platform boundary.
+    - fromEndpoints:
+        - matchLabels:
+            io.cilium.k8s.namespace.labels.platform.aj/segment: edge
+      toPorts:
+        - ports:
+            - port: "8181"
+              protocol: TCP
+
+    - fromEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: monitoring
+
+  egress:
+    # kube-mgmt watches ConfigMaps, so OPA needs the Kubernetes API. Nothing
+    # else — notably no `world`: OPA must not fetch JWKS over the internet per
+    # request. Keys live in policy data. See opa/policy-issuers.yaml.
+    - toEntities:
+        - kube-apiserver
+
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+          rules:
+            dns:
+              - matchPattern: "*"

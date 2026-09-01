@@ -1,0 +1,12 @@
+# Empty, not absent. The missing-label rule cannot see this — the key IS there —
+# so it must fall through to the vocabulary check. `shared` is the word for a
+# workload that serves every line; "" is the word for nothing.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acme-blank
+  labels:
+    team: saas-platform
+    platform.aj/class: saas
+    platform.aj/customer: acme-corp
+    platform.aj/product-line: ""

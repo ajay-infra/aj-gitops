@@ -1,0 +1,124 @@
+# OPA authorization policy for APISIX.
+#
+# Loaded by kube-mgmt, which watches ConfigMaps carrying the
+# openpolicyagent.org/policy=rego label and pushes them into OPA. Policy lives
+# in git under ArgoCD; nothing is applied by hand.
+#
+# APISIX's `opa` plugin queries /v1/data/apisix/authz, so the package name below
+# is load-bearing — it must match `policy: apisix/authz` in
+# apisix/plugin-config-authz.yaml.
+#
+# ── Why the JWT is verified HERE and not at the gateway ─────────────────────
+# This is the entire point of the design. Verifying tokens in OPA makes ISSUERS
+# DATA (see data-issuers.yaml) rather than gateway configuration.
+#
+# A prior estate ran per-tenant issuers as gateway config and OOM-killed at ~24
+# of them against a 16-provider ceiling. Here, adding a tenant edits a ConfigMap
+# — no proxy rollout, no ceiling to hit, and the blast radius of a mistake is a
+# policy reload rather than a gateway restart.
+#
+# THE RULE: a tenant never appears in gateway configuration. Tenants are claims
+# in the token and rows in policy data. Nothing else.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opa-policy-authz
+  namespace: opa
+  labels:
+    openpolicyagent.org/policy: rego
+data:
+  authz.rego: |
+    package apisix.authz
+
+    import rego.v1
+
+    # APISIX expects {"result": {"allow": bool, ...}} from /v1/data/apisix/authz.
+    # `allow` is required; `reason` and `status_code` are used only on denial.
+    default allow := false
+
+    # ── Input shape, as sent by the APISIX opa plugin ───────────────────────
+    #   input.request.{scheme,path,headers,query,port,method,host}
+    #   input.var.{timestamp,server_addr,remote_addr,...}
+    #   input.route / input.service / input.consumer  (only when the plugin is
+    #     configured with_route / with_service / with_consumer)
+    # Header keys arrive lowercased.
+
+    # ── Public paths ────────────────────────────────────────────────────────
+    # Health and docs are unauthenticated on purpose. Kept as an explicit list
+    # rather than a prefix match, so adding a public route is a visible decision.
+    public_paths := {
+      "/healthz",
+      "/readyz",
+      "/openapi.json",
+    }
+
+    allow if input.request.path in public_paths
+
+    # ── Bearer token ────────────────────────────────────────────────────────
+    bearer_token := t if {
+      auth := input.request.headers.authorization
+      startswith(auth, "Bearer ")
+      t := substring(auth, 7, -1)
+    }
+
+    # ── Verification against issuers-as-data ────────────────────────────────
+    # data.issuers.providers comes from the sibling ConfigMap, which is a Rego
+    # package rather than a JSON data document — kube-mgmt mounts data
+    # ConfigMaps at a namespace/name-derived path, whereas a package name is
+    # deterministic. Each entry carries its own JWKS, so N issuers is N rows,
+    # not N pieces of gateway config.
+    #
+    # NOTE the JWKS is held in policy data rather than fetched per request. Do
+    # not replace this with an unbounded http.send; key rotation is a data
+    # refresh, and a per-request fetch would put an external dependency in the
+    # hot path of every API call.
+    claims := payload if {
+      some issuer in data.issuers.providers
+      [valid, _, payload] := io.jwt.decode_verify(bearer_token, {
+        "cert": issuer.jwks,
+        "iss":  issuer.iss,
+        "aud":  issuer.aud,
+      })
+      valid
+    }
+
+    # ── Tenant ──────────────────────────────────────────────────────────────
+    # The tenant is a CLAIM. Under Keycloak Organizations this is the
+    # organization the token was issued for, inside a single realm — which is
+    # what keeps the issuer count flat as tenants grow.
+    tenant := claims.tenant
+
+    # ── Authorization ───────────────────────────────────────────────────────
+    # Skeleton rule: a verified token with a tenant claim and at least one role.
+    # Real route-level rules land here as the API surface is defined.
+    allow if {
+      claims
+      tenant != ""
+      count(roles) > 0
+    }
+
+    roles := r if r := claims.realm_access.roles
+    roles := [] if not claims.realm_access.roles
+
+    # ── Denial detail ───────────────────────────────────────────────────────
+    # 401 when we could not establish who the caller is; 403 when we know and
+    # they are not permitted. Collapsing both to 403 makes debugging painful.
+    status_code := 401 if {
+      not allow
+      not claims
+    }
+
+    status_code := 403 if {
+      not allow
+      claims
+    }
+
+    reason := "no valid bearer token" if {
+      not allow
+      not claims
+    }
+
+    reason := sprintf("tenant %q not permitted for %s %s", [tenant, input.request.method, input.request.path]) if {
+      not allow
+      claims
+    }

@@ -1,0 +1,27 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: requireprobes
+  annotations:
+    description: "All containers in workload namespaces must define liveness and readiness probes."
+spec:
+  crd:
+    spec:
+      names:
+        kind: RequireProbes
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package requireprobes
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.livenessProbe
+          msg := sprintf("Container '%v' must define a livenessProbe.", [container.name])
+        }
+
+        violation[{"msg": msg}] {
+          container := input.review.object.spec.containers[_]
+          not container.readinessProbe
+          msg := sprintf("Container '%v' must define a readinessProbe.", [container.name])
+        }

@@ -20,7 +20,7 @@ spec:
   project: platform
 
   source:
-    repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+    repoURL:        https://github.com/ajay-infra/aj-gitops
     targetRevision: v1.0.0
     path:           applicationsets/central/prod
 
@@ -54,7 +54,7 @@ spec:
   project: platform
 
   source:
-    repoURL:        https://github.com/ajay-infra/aj-platform-gitops
+    repoURL:        https://github.com/ajay-infra/aj-gitops
     targetRevision: v1.0.0
     path:           applicationsets/workload
 

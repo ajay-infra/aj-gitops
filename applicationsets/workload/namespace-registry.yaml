@@ -42,10 +42,10 @@ spec:
               values:
                 autoSync: "{{.metadata.labels.auto_sync}}"
           - git:
-              repoURL: https://github.com/ajay-infra/aj-namespace-registry
+              repoURL: https://github.com/ajay-infra/aj-gitops
               revision: main
               files:
-                - path: "registry/all-workload/*.yaml"
+                - path: "namespaces/registry/all-workload/*.yaml"
 
   template:
     metadata:
@@ -68,15 +68,15 @@ spec:
       project: platform
 
       sources:
-        - repoURL: https://github.com/ajay-infra/aj-namespace-registry
+        - repoURL: https://github.com/ajay-infra/aj-gitops
           targetRevision: main
-          path: chart
+          path: namespaces/chart
           helm:
             releaseName: "ns-{{.namespace}}"
             valueFiles:
-              - $values/registry/all-workload/{{.namespace}}.yaml
+              - $values/namespaces/registry/all-workload/{{.namespace}}.yaml
 
-        - repoURL: https://github.com/ajay-infra/aj-namespace-registry
+        - repoURL: https://github.com/ajay-infra/aj-gitops
           targetRevision: main
           ref: values
 

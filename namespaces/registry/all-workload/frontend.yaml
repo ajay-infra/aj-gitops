@@ -1,0 +1,14 @@
+# Namespace entry — rendered into a Namespace, ResourceQuota and LimitRange by
+# chart/. Never write a Namespace manifest by hand: the label set is enforced by
+# the template, not by whoever remembers it.
+namespace: frontend
+
+identity:
+  team:     product
+  class:    product
+  customer: internal
+  segment:  app
+
+guardrails:
+  podSecurity: restricted
+  quota:       medium

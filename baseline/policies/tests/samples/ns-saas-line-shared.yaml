@@ -1,0 +1,14 @@
+# Cross-cutting SaaS infrastructure — auth, notifications, the event bus. It
+# genuinely serves every line, and `shared` is the reserved word that says so.
+# Allocated to lines by a rule, not by this label; the label's job is to record
+# that a rule is needed rather than leaving the field absent, where it would be
+# indistinguishable from forgotten.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: saas-identity
+  labels:
+    team: saas-platform
+    platform.aj/class: saas
+    platform.aj/customer: pooled
+    platform.aj/product-line: shared

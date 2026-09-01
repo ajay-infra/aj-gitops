@@ -1,0 +1,9 @@
+# hostNetwork is a pod-level escape, not a container securityContext one.
+apiVersion: v1
+kind: Pod
+metadata: {name: bad-hostnet, namespace: frontend}
+spec:
+  hostNetwork: true
+  containers:
+    - name: app
+      image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/frontend:v1

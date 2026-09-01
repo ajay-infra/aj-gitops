@@ -1,0 +1,40 @@
+# ApisixPluginConfig — rate limiting.
+#
+# Replaces aj-cluster-baseline/kong/rate-limiting.yaml, which was per-consumer and
+# Valkey-backed. Same shape here: `limit-count` keyed on the consumer when one
+# was identified, with shared counters so the limit is global across gateway
+# replicas rather than per-pod.
+#
+# ⚠ BLOCKED: the Valkey policy below needs a real endpoint. `aj-tf-module-valkey`
+# has no consumer and no pipeline stage applies it — see aj-infra-context#15,
+# and aj-infra-context#17 for why the data-layer engine choice is deferred.
+# Until then `policy: local` is the honest setting: counters are per-pod, so the
+# effective limit is rate × replicas. Do not ship `local` to production and
+# describe it as a global limit.
+apiVersion: apisix.apache.org/v2
+kind: ApisixPluginConfig
+metadata:
+  name: ratelimit
+  namespace: apisix
+spec:
+  plugins:
+    - name: limit-count
+      enable: true
+      config:
+        count: 100
+        time_window: 60
+
+        # consumer_name when key-auth identified one; falls back to remote_addr
+        # for anonymous callers.
+        key_type: var_combination
+        key: "$consumer_name $remote_addr"
+
+        rejected_code: 429
+        rejected_msg: "rate limit exceeded"
+
+        # See the warning above. Switch to `redis` with a real Valkey endpoint
+        # before this is load-bearing.
+        policy: local
+        # policy: redis
+        # redis_host: valkey.<env>.cache.amazonaws.com
+        # redis_port: 6379

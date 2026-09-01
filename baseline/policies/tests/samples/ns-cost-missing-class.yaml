@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: payments
+  labels:
+    team: prd-1234
+    platform.aj/customer: internal

@@ -14,7 +14,7 @@ spec:
   description: Platform layer — ArgoCD, Grafana LGTM, Alloy, ARC, Cloudability
 
   sourceRepos:
-    - https://github.com/ajay-infra/aj-platform-gitops
+    - https://github.com/ajay-infra/aj-gitops
     # Upstream chart repos
     - https://argoproj.github.io/argo-helm
     - https://grafana.github.io/helm-charts

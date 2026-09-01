@@ -1,0 +1,20 @@
+# A pod that should satisfy every policy at once.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: good
+  namespace: frontend
+spec:
+  containers:
+    - name: app
+      image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/frontend:v1.2.3
+      livenessProbe:
+        httpGet: {path: /healthz, port: 8080}
+      readinessProbe:
+        httpGet: {path: /ready, port: 8080}
+      resources:
+        requests: {cpu: 100m, memory: 128Mi}
+        limits: {cpu: 500m, memory: 512Mi}
+      securityContext:
+        privileged: false
+        allowPrivilegeEscalation: false

@@ -1,0 +1,8 @@
+# No tag at all — defaults to :latest, which the policy treats the same way.
+apiVersion: v1
+kind: Pod
+metadata: {name: bad-untagged, namespace: frontend}
+spec:
+  containers:
+    - name: app
+      image: nginx

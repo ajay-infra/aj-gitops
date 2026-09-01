@@ -1,0 +1,53 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RequireProductLine
+metadata:
+  name: require-product-line-on-saas-namespaces
+  annotations:
+    description: >-
+      DRYRUN, deliberately. No namespace in the estate has platform.aj/class: saas
+      at all, so this constraint currently matches nothing — and a rule that
+      matches nothing looks exactly like a rule that finds no violations. Dryrun
+      puts that in the audit log instead of a clean pass. Flip to deny once
+      onboard-saas-customer emits the label.
+spec:
+  enforcementAction: dryrun
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - default
+      - gatekeeper-system
+  parameters:
+    # The registry. THIS is the enforced copy — aj-infra-context/arch/tag-profiles.md
+    # §5.3 documents the same list for humans and can drift from it.
+    #
+    # It lives here as a parameter rather than in the org SCP on purpose: the
+    # SCP checks that ProductLine is PRESENT, and only this checks that it is
+    # real. Putting a closed vocabulary in an SCP would mean editing the one
+    # control an account administrator cannot override every time the business
+    # names a product — org-wide blast radius for a routine event.
+    #
+    # Adding a line is a one-line edit here plus a row in the doc. No policy
+    # change, no template change.
+    allowedLines:
+      - crm
+      - analytics
+      - merch
+      - pos
+      - ticketing
+      # Reserved. Auth, notifications, the event bus and the gateway itself
+      # serve every line. Without a word for that, absent-because-cross-cutting
+      # is indistinguishable from absent-because-forgotten — the same reason
+      # 'pooled' exists for platform.aj/customer. 'shared' spend is allocated by
+      # a rule; the label's job is to say a rule is needed.
+      - shared
+    # SAAS ONLY. Product's chargeback key is the product code on `team`
+    # (require-product-code), and a ProductLine tag on a product namespace would
+    # be 'shared' or empty on every one — a field with one possible value is
+    # decoration. Platform and sandbox are overhead, not a sellable unit.
+    appliesToClasses:
+      - saas

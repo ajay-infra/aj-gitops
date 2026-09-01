@@ -1,0 +1,7 @@
+{{- include "ns.validate" . -}}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ .Values.namespace }}
+  labels:
+    {{- include "ns.labels" . | nindent 4 }}

@@ -1,0 +1,11 @@
+# A pooled SaaS namespace carrying both chargeback axes: which customer, and
+# which product line. Neither is derivable from the other.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: acme-crm
+  labels:
+    team: saas-platform
+    platform.aj/class: saas
+    platform.aj/customer: acme-corp
+    platform.aj/product-line: crm

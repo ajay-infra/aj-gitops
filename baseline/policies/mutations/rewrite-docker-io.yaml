@@ -1,0 +1,57 @@
+# Rewrites docker.io images to ECR pull-through cache at admission time.
+# docker.io/library/nginx:1.27 → ACCOUNT.dkr.ecr.REGION.amazonaws.com/dockerhub/library/nginx:1.27
+#
+# Replace ACCOUNT_ID and REGION with values from aj-tf-module-ecr outputs.
+# AssignImage: assignDomain replaces the registry; assignPath prepends the cache namespace.
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: AssignImage
+metadata:
+  name: rewrite-docker-io-containers
+spec:
+  applyTo:
+    - groups: [""]
+      kinds: ["Pod"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+      - falcon-system
+  location: "spec.containers[name:*].image"
+  parameters:
+    assignDomain: "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+    assignPath: "dockerhub"
+    pathTests:
+      - subPath: "domain"
+        condition: In
+        value:
+          - "docker.io"
+          - "registry-1.docker.io"
+---
+apiVersion: mutations.gatekeeper.sh/v1
+kind: AssignImage
+metadata:
+  name: rewrite-docker-io-init-containers
+spec:
+  applyTo:
+    - groups: [""]
+      kinds: ["Pod"]
+      versions: ["v1"]
+  match:
+    scope: Namespaced
+    excludedNamespaces:
+      - kube-system
+      - gatekeeper-system
+      - falcon-system
+  location: "spec.initContainers[name:*].image"
+  parameters:
+    assignDomain: "REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com"
+    assignPath: "dockerhub"
+    pathTests:
+      - subPath: "domain"
+        condition: In
+        value:
+          - "docker.io"
+          - "registry-1.docker.io"

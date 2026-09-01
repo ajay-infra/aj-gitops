@@ -1,0 +1,24 @@
+# KEDA ScaledObject — frontend services
+# Scales on HTTP request rate (from Prometheus/Mimir).
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: frontend-scaler
+  namespace: frontend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: frontend # replace with actual deployment name
+  minReplicaCount: 0 # set to 2 for prod
+  maxReplicaCount: 30
+  pollingInterval: 15
+  cooldownPeriod: 60
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://mimir-nginx.monitoring.svc.cluster.local
+        metricName: http_rps_frontend
+        query: |
+          sum(rate(http_requests_total{namespace="frontend"}[1m]))
+        threshold: "50" # scale up when > 50 RPS per replica

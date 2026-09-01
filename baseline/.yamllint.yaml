@@ -1,0 +1,11 @@
+---
+extends: relaxed
+rules:
+  line-length:
+    max: 160
+  comments:
+    min-spaces-from-content: 1
+  truthy:
+    allowed-values: ["true", "false", "on", "off", "yes", "no"]
+  indentation:
+    spaces: 2

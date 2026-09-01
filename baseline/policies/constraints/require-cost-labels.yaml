@@ -1,0 +1,28 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RequireCostLabels
+metadata:
+  name: require-cost-labels-on-namespaces
+  annotations:
+    description: >-
+      Namespaces only. Enforcing on pods as well would be tighter, but pods
+      inherit attribution from their namespace in Cloudability, and per-pod
+      enforcement would break every third-party chart that does not know about
+      these labels. Namespace-level is where the value is and the friction is not.
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: [""]
+        kinds: ["Namespace"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - default
+      - gatekeeper-system
+  parameters:
+    allowedClasses:
+      - platform
+      - product
+      - saas
+      - sandbox

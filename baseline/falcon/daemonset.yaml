@@ -1,0 +1,69 @@
+# CrowdStrike Falcon sensor DaemonSet.
+# Runs on every node — requires privileged security context.
+# falcon-system namespace has admission.gatekeeper.sh/ignore: "true" label
+# to bypass the no-privileged-containers OPA constraint.
+#
+# Image + CID are injected from Secrets Manager via ESO (falcon-credentials secret).
+# Replace FALCON_CID and image tag with values from your CrowdStrike subscription.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: falcon-sensor
+  namespace: falcon-system
+  labels:
+    app: falcon-sensor
+spec:
+  selector:
+    matchLabels:
+      app: falcon-sensor
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 10%
+  template:
+    metadata:
+      labels:
+        app: falcon-sensor
+    spec:
+      tolerations:
+        - operator: Exists # run on ALL nodes including tainted ones
+      hostPID: true
+      hostNetwork: true
+      hostIPC: true
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: falcon-sensor
+          image: REPLACE_WITH_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/falcon-sensor:REPLACE_WITH_TAG
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+          env:
+            - name: FALCONCTL_OPT_CID
+              valueFrom:
+                secretKeyRef:
+                  name: falcon-credentials
+                  key: cid
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: dev
+              mountPath: /dev
+            - name: run
+              mountPath: /run
+            - name: sys
+              mountPath: /sys
+      volumes:
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: run
+          hostPath:
+            path: /run
+        - name: sys
+          hostPath:
+            path: /sys
