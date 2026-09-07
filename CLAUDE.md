@@ -1,4 +1,4 @@
-# CLAUDE.md — aj-platform-gitops
+# CLAUDE.md — aj-gitops
 
 > Local context file for Claude. Not pushed to GitHub.
 
@@ -20,7 +20,7 @@ Does NOT contain Terraform. Does NOT create ArgoCD Applications for team service
 ## Repo Layout
 
 ```
-aj-platform-gitops/
+aj-gitops/
 ├── bootstrap/
 │   ├── nonprod.yaml         # kubectl apply once → ArgoCD picks up LGTM ApplicationSet
 │   └── prod.yaml
@@ -71,9 +71,10 @@ aj-platform-gitops/
 │       └── _disabled/  — arc-controller.yaml, gatekeeper.yaml, falcon.yaml, moved here 2026-08-24;
 │                          inert (no directory.recurse), see Known Gaps below to re-enable
 └── .github/workflows/
-    ├── ci.yml                   # helm lint, yamllint, kubeconform, helm template diff
-    ├── bootstrap-argocd.yml     # helm install/upgrade ArgoCD on central clusters
-    └── install-argo-rollouts.yml # helm install/upgrade Argo Rollouts on workload clusters
+    ├── ci.yml                   # helm lint, yamllint, kubeconform, gator/opa policy
+    └── platform-dry-run.yml     # helm template of every install, offline, per hub
+                                 # NOTHING here mutates a cluster or holds credentials:
+                                 # the ArgoCD install is aj-infra-central/argocd.tf
 ```
 
 ---
@@ -81,16 +82,25 @@ aj-platform-gitops/
 ## How Platform Components Are Deployed
 
 ### ArgoCD (central clusters only)
-**NOT managed by ArgoCD itself** — installed and upgraded via `bootstrap-argocd.yml` workflow.
+**NOT managed by ArgoCD itself, and not installed from this repo.** It cannot
+install itself, and self-management leaves a failed upgrade unrecoverable by the
+thing that failed. `aj-infra-central/argocd.tf` installs and upgrades it —
+release name `argocd`, values in `aj-infra-central/helm-values/argocd/<class>-<tier>.yaml`.
 
 ```
-workflow_dispatch: bootstrap-argocd.yml
-  inputs: tier (nonprod/prod), action (install/upgrade)
-  → helm upgrade --install argo-cd argo/argo-cd
-  → kubectl apply -f bootstrap/<tier>.yaml   (install only)
+terraform apply (aj-infra-central)
+  → helm_release.argocd — release `argocd`, namespace argocd
+then, once:
+  → kubectl apply -f projects/<class>/{platform,workloads}.yaml
+  → kubectl apply -f bootstrap/<class>/<tier>.yaml
 ```
 
-To upgrade ArgoCD: bump `ARGOCD_CHART_VERSION` in `bootstrap-argocd.yml`, run with `action: upgrade`.
+To upgrade ArgoCD: bump `chart_version_argocd` in
+`aj-infra/envs/central/<class>/<tier>/central.tfvars` and apply aj-infra-central.
+
+This repo used to carry a second installer, `bootstrap-argocd.yml`, under
+release name `argocd` while argocd.tf used `argo-cd`. The chart names every
+resource after the release, so the two were parallel installs rather than one.
 
 ### LGTM Stack (central clusters only)
 Managed by ArgoCD via ApplicationSet after bootstrap:
@@ -118,12 +128,16 @@ applicationsets/workload/k8s-monitoring.yaml
 Ships metrics → central Mimir, logs → central Loki, traces → central Tempo over VPC peering.
 
 ### Argo Rollouts (workload clusters)
-**NOT managed by ArgoCD** — installed and upgraded via `install-argo-rollouts.yml` workflow (same reasoning as ArgoCD).
+**Managed by ArgoCD**, via `applicationsets/workload/<class>/argo-rollouts.yaml`.
+
+It was a workflow here, justified by "same reasoning as ArgoCD" — but the
+reasoning does not carry: Argo Rollouts has no chicken-and-egg problem, it is an
+add-on like keda or gatekeeper. The workflow also resolved cluster names that
+the class split renamed, so it could not have run.
 
 ```
-workflow_dispatch: install-argo-rollouts.yml
-  inputs: environment, color (prod only), action (install/upgrade)
-  → helm upgrade --install argo-rollouts argo/argo-rollouts
+ApplicationSet → one Application per workload cluster of this class
+  chart argo-rollouts 2.38.0, values charts/argo-rollouts/values/<env>.yaml
 ```
 
 To upgrade: bump `ROLLOUTS_CHART_VERSION` in the workflow, run with `action: upgrade`.
@@ -266,15 +280,17 @@ labels:
 
 ```
 1. provision-central.yml  → central EKS cluster up
-2. bootstrap-argocd.yml (action: install)
-     → helm install ArgoCD
-     → kubectl apply projects/<class>/platform.yaml
-     → kubectl apply projects/<class>/workloads.yaml
-     → kubectl apply bootstrap/<tier>.yaml
-3. ArgoCD syncs lgtm.yaml → installs Grafana + Loki + Mimir + Tempo
-4. provision-eks.yml      → workload cluster up + registered with ArgoCD
-5. install-argo-rollouts.yml → Argo Rollouts on workload cluster
-6. ArgoCD syncs k8s-monitoring ApplicationSet → deploys to new workload cluster
+2. aj-infra-central terraform apply
+     → helm_release.argocd installs ArgoCD (release `argocd`)
+     → LGTM buckets, IAM roles, pod identities
+3. kubectl apply, once:
+     → projects/<class>/platform.yaml
+     → projects/<class>/workloads.yaml
+     → bootstrap/<class>/<tier>.yaml
+4. ArgoCD syncs lgtm.yaml → installs Grafana + Loki + Mimir + Tempo
+5. provision-eks.yml      → workload cluster up + registered with ArgoCD
+6. ArgoCD syncs the workload ApplicationSets → k8s-monitoring, argo-rollouts,
+   keda, gatekeeper and the rest onto the new cluster
 7. register-namespace.yml (aj-infra-release) → team onboarded
 ```
 

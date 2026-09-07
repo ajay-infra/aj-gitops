@@ -1,4 +1,4 @@
-# skills.md — aj-platform-gitops
+# skills.md — aj-gitops
 
 ## Purpose
 GitOps source of truth for the central cluster platform layer and workload-cluster
@@ -53,14 +53,17 @@ Loki/Mimir/Tempo are injected via ApplicationSet `parameters:` from Terraform ou
 not set in this repo's values files.
 
 ## Branching convention
-- `main` — active development, ArgoCD/bootstrap workflows read directly from here
+- `main` — active development; ArgoCD reads tagged refs (`targetRevision`), not `main`
 - No tags — not consumed as a versioned module by anything
 
 ## CI checks
-`ci.yml`: helm lint, yamllint, kubeconform, helm template diff. `bootstrap-argocd.yml`
-and `install-argo-rollouts.yml` are `workflow_dispatch` only — ArgoCD and Argo Rollouts
-are deliberately installed outside ArgoCD's own management (avoids self-disruption
-during upgrades).
+`ci.yml`: helm lint, yamllint, kubeconform, gator + opa policy.
+`platform-dry-run.yml`: renders the LGTM stack and the ArgoCD install with
+`helm template`, per hub, and fails on a parameter that renders to nothing.
+
+Both are read-only. This repo has no workflow that mutates a cluster and no AWS
+credentials — ArgoCD is installed by `aj-infra-central/argocd.tf`, and Argo
+Rollouts is an ApplicationSet like every other add-on.
 
 ## Agentic capabilities
 - Detect an ApplicationSet whose `valueFiles` path has no matching file in `charts/` (caught 3 of these already — see Known Gaps in CLAUDE.md)

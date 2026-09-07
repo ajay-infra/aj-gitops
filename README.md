@@ -1,8 +1,11 @@
-# aj-platform-gitops
+# aj-gitops
 
 GitOps source of truth for the AI Search Engine platform layer.
 
-Owns Helm values, ArgoCD bootstrap, ApplicationSets, and platform install workflows for all central and workload clusters.
+Owns Helm values, ArgoCD bootstrap manifests and ApplicationSets for all central
+and workload clusters — **everything ArgoCD deploys, and nothing that installs
+ArgoCD itself.** The ArgoCD install lives in `aj-infra-central` (`argocd.tf`);
+this repo holds no credentials and no workflow that mutates a cluster.
 
 ---
 
@@ -27,9 +30,8 @@ applicationsets/
   workload/         Deploys k8s-monitoring + app workloads to all workload clusters
 projects/           ArgoCD AppProject RBAC manifests
 .github/workflows/
-  bootstrap-argocd.yml      Install/upgrade ArgoCD via Helm
-  install-argo-rollouts.yml Install/upgrade Argo Rollouts via Helm
-  ci.yml                    Helm lint, YAML lint, schema validation
+  ci.yml                    Helm lint, YAML lint, schema validation, policy
+  platform-dry-run.yml      Renders every install, offline, per hub
 ```
 
 ---
@@ -51,12 +53,14 @@ exist. **Generation is what you are testing there, not sync.**
 
 | Component | How | Managed by |
 |---|---|---|
-| ArgoCD | `bootstrap-argocd.yml` workflow (helm upgrade --install) | Workflow |
-| Argo Rollouts | `install-argo-rollouts.yml` workflow (helm upgrade --install) | Workflow |
+| ArgoCD | `aj-infra-central/argocd.tf` (`helm_release`, release `argocd`) | Terraform |
+| Argo Rollouts | ApplicationSet → ArgoCD Application | ArgoCD |
 | Grafana, Loki, Mimir, Tempo | ApplicationSet → ArgoCD Application | ArgoCD |
 | k8s-monitoring (Alloy) | ApplicationSet → ArgoCD Application | ArgoCD |
 
-ArgoCD and Argo Rollouts are intentionally kept outside ArgoCD's own management to avoid circular dependency and self-disruption during upgrades.
+ArgoCD is intentionally kept outside ArgoCD's own management — it cannot install itself, and self-management makes a failed upgrade unrecoverable by the thing that failed. It is installed and upgraded by Terraform, which is also the recovery path.
+
+Argo Rollouts used to be a workflow here for the same stated reason, but it has no such chicken-and-egg problem: it is an add-on like any other, so it is an ApplicationSet now.
 
 ---
 
@@ -123,7 +127,7 @@ Blue/green pays for itself when you upgrade frequently (workload clusters: multi
 
 **5. ArgoCD and LGTM upgrades are already decoupled from EKS**
 
-- ArgoCD upgrades: `bootstrap-argocd.yml` workflow — online Helm upgrade, rolling pod replacement
+- ArgoCD upgrades: bump `chart_version_argocd` in `aj-infra/envs/central/<class>/<tier>/central.tfvars` and apply `aj-infra-central` — online Helm upgrade, rolling pod replacement
 - LGTM upgrades: ApplicationSet version bump → ArgoCD does rolling Helm upgrade
 - Neither requires an EKS node replacement
 
@@ -173,7 +177,7 @@ kubectl get pods -n argocd
 kubectl get pods -n monitoring
 
 # 7. If ArgoCD version bump also needed — run separately after EKS upgrade
-#    bootstrap-argocd.yml action=upgrade
+#    bump chart_version_argocd in aj-infra, then apply aj-infra-central
 ```
 
 ### When you might reconsider
