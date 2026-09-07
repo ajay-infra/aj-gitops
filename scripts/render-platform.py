@@ -13,10 +13,11 @@ WHAT THIS IS
               grafana, loki, mimir, tempo — one Application per component, per
               hub. Four hubs, sixteen renders.
 
-      argocd  the ArgoCD install itself. It is declared TWICE in this estate:
-                - aj-infra-central/argocd.tf         helm_release, values there
-                - .github/workflows/bootstrap-argocd.yml   helm upgrade --install
-              Both are rendered and compared, because they do not agree.
+      argocd  the ArgoCD install itself, declared once — aj-infra-central's
+              `helm_release.argocd`, values in that repo. This repo used to
+              carry a second installer under a different release name, so the
+              two were parallel installs rather than one; that is gone, and
+              this renders what is left.
 
 WHAT THIS IS NOT
     Not `terraform plan`. aj-infra-central reads live infrastructure at plan
@@ -46,7 +47,6 @@ Usage:
 """
 
 import argparse
-import difflib
 import os
 import re
 import subprocess
@@ -200,17 +200,6 @@ def parse_lgtm(path, cls, tier, repo_root):
     return renders
 
 
-def argocd_version_from_workflow(repo_root):
-    """ARGOCD_CHART_VERSION out of bootstrap-argocd.yml — the file that installs it."""
-    wf = repo_root / ".github/workflows/bootstrap-argocd.yml"
-    doc = load_yaml(wf)
-    version = doc.get("env", {}).get("ARGOCD_CHART_VERSION")
-    repo = doc.get("env", {}).get("ARGOCD_CHART_REPO")
-    if not version or not repo:
-        raise Failure(f"{wf}: ARGOCD_CHART_VERSION / ARGOCD_CHART_REPO not found")
-    return str(version), repo
-
-
 def argocd_version_from_central(central_root):
     """The `chart_version_argocd` default in aj-infra-central/variables.tf.
 
@@ -228,46 +217,28 @@ def argocd_version_from_central(central_root):
 
 
 def parse_argocd(repo_root, central_root, hubs):
-    """Both declarations of the ArgoCD install, per hub."""
+    """The ArgoCD install, per hub. One declaration: aj-infra-central."""
+    if central_root is None:
+        return []
     renders = []
-    wf_version, wf_repo = argocd_version_from_workflow(repo_root)
-
+    version = argocd_version_from_central(central_root)
     for cls, tier in hubs:
-        # 1. What bootstrap-argocd.yml installs. Note the values path carries no
-        #    class — one file per tier, shared by both hubs.
-        values = repo_root / f"charts/argocd/values/{tier}.yaml"
-        if values.is_file():
-            renders.append(Render(
-                stack="argocd",
-                hub=f"{cls}/{tier}",
-                name="argocd (bootstrap-argocd.yml)",
-                chart="argo-cd",
-                repo=wf_repo,
-                version=wf_version,
-                namespace="argocd",
-                release="argocd",
-                values_files=[values],
-                sets=[],
-                source=".github/workflows/bootstrap-argocd.yml",
-            ))
-
-        # 2. What aj-infra-central/argocd.tf installs, if that repo is present.
-        if central_root is not None:
-            tf_values = central_root / f"helm-values/argocd/{cls}-{tier}.yaml"
-            if tf_values.is_file():
-                renders.append(Render(
-                    stack="argocd",
-                    hub=f"{cls}/{tier}",
-                    name="argocd (aj-infra-central)",
-                    chart="argo-cd",
-                    repo="https://argoproj.github.io/argo-helm",
-                    version=argocd_version_from_central(central_root),
-                    namespace="argocd",
-                    release="argo-cd",
-                    values_files=[tf_values],
-                    sets=[],
-                    source="aj-infra-central/argocd.tf",
-                ))
+        values = central_root / f"helm-values/argocd/{cls}-{tier}.yaml"
+        if not values.is_file():
+            raise Failure(f"aj-infra-central has no helm-values/argocd/{cls}-{tier}.yaml")
+        renders.append(Render(
+            stack="argocd",
+            hub=f"{cls}/{tier}",
+            name="argocd",
+            chart="argo-cd",
+            repo="https://argoproj.github.io/argo-helm",
+            version=version,
+            namespace="argocd",
+            release="argocd",
+            values_files=[values],
+            sets=[],
+            source="aj-infra-central/argocd.tf",
+        ))
     return renders
 
 
@@ -370,10 +341,9 @@ def markdown(renders, kube_version, central_root, out_dir):
     if argocd:
         add("## Argo stack")
         add("")
-        if central_root is None:
-            add("> `aj-infra-central` was not checked out, so only the "
-                "`bootstrap-argocd.yml` declaration is rendered.")
-            add("")
+        add("Declared once, by `aj-infra-central/argocd.tf`. This repo holds "
+            "what ArgoCD deploys, never what installs it.")
+        add("")
         add("| Hub | Declared by | Release | Chart | Values | Manifests |")
         add("|---|---|---|---|---|---:|")
         for r in argocd:
@@ -382,7 +352,6 @@ def markdown(renders, kube_version, central_root, out_dir):
             add(f"| `{r.hub}` | `{r.source}`{status} | `{r.release}` | "
                 f"`{r.chart}` {r.version} | `{values}` | {r.manifests} |")
         add("")
-        add(comparison(argocd))
 
     add("## What this does not cover")
     add("")
@@ -396,52 +365,6 @@ def markdown(renders, kube_version, central_root, out_dir):
     add("- **No cluster Secret**, so ArgoCD's cluster generator is resolved "
         "from the ApplicationSet's own selector and the ECR registry is mocked.")
     return "\n".join(lines)
-
-
-def comparison(argocd_renders):
-    """The two ArgoCD declarations, per hub, against each other."""
-    out = ["### The two declarations, compared", ""]
-    by_hub = {}
-    for r in argocd_renders:
-        by_hub.setdefault(r.hub, []).append(r)
-
-    any_pair = False
-    for hub, pair in sorted(by_hub.items()):
-        if len(pair) != 2 or any(r.out is None for r in pair):
-            continue
-        any_pair = True
-        a, b = pair
-        left = a.out.read_text().splitlines()
-        right = b.out.read_text().splitlines()
-        differing = sum(1 for line in difflib.unified_diff(left, right, n=0)
-                        if line.startswith(("+", "-"))
-                        and not line.startswith(("+++", "---")))
-        names_a = {(d.get("kind"), d.get("metadata", {}).get("name"))
-                   for d in yaml.safe_load_all(a.out.read_text()) if d}
-        names_b = {(d.get("kind"), d.get("metadata", {}).get("name"))
-                   for d in yaml.safe_load_all(b.out.read_text()) if d}
-        only_a = sorted(f"{k}/{n}" for k, n in names_a - names_b)
-        only_b = sorted(f"{k}/{n}" for k, n in names_b - names_a)
-
-        out.append(f"**`{hub}`** — release `{a.release}` vs `{b.release}`, "
-                   f"{differing} differing lines.")
-        if only_a:
-            out.append(f"- only in `{a.source}`: {', '.join(f'`{x}`' for x in only_a[:8])}")
-        if only_b:
-            out.append(f"- only in `{b.source}`: {', '.join(f'`{x}`' for x in only_b[:8])}")
-        if differing == 0:
-            out.append("- byte-identical output")
-        elif not only_a and not only_b:
-            out.append("- same resources, different contents")
-        out.append("")
-
-    if not any_pair:
-        return ""
-    out.append("Two declarations of one install, under two release names. "
-               "Installing via one and then the other produces two releases, "
-               "not an upgrade.")
-    out.append("")
-    return "\n".join(out)
 
 
 def main():
