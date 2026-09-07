@@ -1,0 +1,103 @@
+---
+# Platform dry run — what the hubs would actually install, rendered offline.
+#
+# ArgoCD's repo-server renders a Helm source by running `helm template`. This
+# runs the same command against the same files, so the manifests in the summary
+# and the artifact are the manifests a hub would apply.
+#
+# Two stacks, four hubs, six renders each:
+#   LGTM    applicationsets/central/<class>/<tier>/lgtm.yaml — grafana, loki,
+#           mimir, tempo
+#   Argo    the ArgoCD install itself, from BOTH places that declare it —
+#           bootstrap-argocd.yml here, and argocd.tf in aj-infra-central
+#
+# THIS IS NOT A `terraform plan`. aj-infra-central reads live infrastructure at
+# plan time and cannot plan offline; the AWS half of argocd.tf (IAM role, ksops
+# KMS policy, pod identity association) is not covered by this or by anything
+# else today. See scripts/render-platform.py for the full list of gaps.
+#
+# No path filters, deliberately: ci.yml's jobs are the always-green baseline and
+# a skipped check is not a passed check.
+name: Platform dry run
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # aj-infra/envs/central/<class>/<tier>/eks.tfvars — all four hubs, 2026-09-07.
+  # Duplicated because aj-infra is private and this workflow cannot read it.
+  KUBE_VERSION: "1.35"
+  # Argo CD 2.13 (chart 7.7.11) bundles Helm 3.16 — render with what it renders with.
+  HELM_VERSION: "3.16.3"
+
+jobs:
+  render:
+    name: ${{ matrix.class }}/${{ matrix.tier }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        class: [product, saas]
+        tier: [nonprod, prod]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      # Public repo — the default token reads it without a PAT. GH_MODULES_TOKEN
+      # does not exist in this org, so a private repo could not be read here.
+      - name: Check out aj-infra-central (the other ArgoCD declaration)
+        uses: actions/checkout@v5
+        with:
+          repository: ajay-infra/aj-infra-central
+          path: .aj-infra-central
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - run: pip install pyyaml
+
+      - name: Render
+        run: |
+          python3 scripts/render-platform.py \
+            --hub "${{ matrix.class }}/${{ matrix.tier }}" \
+            --central-root .aj-infra-central \
+            --kube-version "${{ env.KUBE_VERSION }}" \
+            --out out/dry-run \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz \
+            | tar xz && sudo mv kubeconform /usr/local/bin/
+
+      - name: The rendered manifests are valid Kubernetes
+        # -ignore-missing-schemas skips CRs whose CRDs ship in the same render
+        # (ServiceMonitor, Application, …) — the same allowance ci.yml makes.
+        run: |
+          FILES="$(find out/dry-run -name '*.yaml' -type f | sort)"
+          COUNT="$(printf '%s\n' "$FILES" | grep -c . || true)"
+          echo "validating $COUNT rendered file(s)"
+          if [ "$COUNT" -lt 6 ]; then
+            echo "::error::only $COUNT rendered file(s) for this hub — expected 6"
+            echo "::error::(4 LGTM components + 2 ArgoCD declarations)."
+            echo "::error::Refusing to report success on a short render."
+            exit 1
+          fi
+          # shellcheck disable=SC2086
+          kubeconform -schema-location default -ignore-missing-schemas \
+            -kubernetes-version "${{ env.KUBE_VERSION }}.0" -summary $FILES
+
+      - name: Keep the manifests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-${{ matrix.class }}-${{ matrix.tier }}
+          path: out/dry-run
+          retention-days: 14

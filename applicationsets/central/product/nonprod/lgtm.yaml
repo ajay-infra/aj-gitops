@@ -9,7 +9,9 @@
 #
 # ECR pull-through: each component's image.repository is overridden to route
 # docker.io/grafana/* through the ECR dockerhub/ pull-through prefix.
-# Verify imageParam paths: helm show values <chart> --version <version>
+# imageParam paths are asserted by scripts/render-platform.py — a path that
+# does not exist in the chart renders to nothing, silently, and CI now fails
+# on that rather than leaving it to be spotted by eye.
 #
 # S3 buckets: central-product-product-nonprod-<s3BucketSuffix> — names match aj-infra-central locals.tf.
 # ArgoCD is NOT managed here — installed via bootstrap-argocd.yml workflow.
@@ -65,7 +67,7 @@ spec:
                   valuesFile:     charts/mimir/values/nonprod.yaml
                   s3BucketParam:  mimir.structuredConfig.common.storage.s3.bucket_name
                   s3BucketSuffix: mimir-blocks
-                  imageParam:     mimir.image.repository
+                  imageParam:     image.repository
                   imageRepo:      grafana/mimir
 
                 - component:      tempo
@@ -76,7 +78,7 @@ spec:
                   valuesFile:     charts/tempo/values/nonprod.yaml
                   s3BucketParam:  tempo.storage.trace.s3.bucket
                   s3BucketSuffix: tempo-traces
-                  imageParam:     tempo.image.repository
+                  imageParam:     tempo.repository
                   imageRepo:      grafana/tempo
 
   template:
@@ -102,7 +104,7 @@ spec:
             parameters:
               # S3 storage bucket — empty s3BucketParam (Grafana) produces a no-op set
               - name:  "{{s3BucketParam}}"
-                value: "central-{{values.env}}-{{s3BucketSuffix}}"
+                value: "central-product-{{values.env}}-{{s3BucketSuffix}}"
               # Route container pulls through ECR dockerhub/ pull-through cache
               - name:  "{{imageParam}}"
                 value: "{{values.ecr_registry}}/dockerhub/{{imageRepo}}"
