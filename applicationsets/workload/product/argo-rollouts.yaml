@@ -1,0 +1,98 @@
+# ── product hub only ───────────────────────────────────────────────────────────
+# This tree is synced by the product hubs and no other. Editing it cannot reach a
+# saas cluster: the saas hubs sync applicationsets/workload/saas/.
+#
+# ApplicationSet — Argo Rollouts on all workload clusters
+#
+# Replaces .github/workflows/install-argo-rollouts.yml, which helm-installed
+# this from inside the GitOps repo. That workflow was the ONLY installer of
+# argo-rollouts in the estate, so this is a move, not a deletion. It also
+# resolved cluster names as `ai-search-prod-<color>` and `ai-search-<env>`,
+# which no longer exist — the class split renamed them, and nothing noticed
+# because the workflow has never run.
+#
+# Rollout CRDs ship with the chart. ServerSideApply handles their size; client
+# side apply fails on the annotation limit for CRDs this large.
+#
+# Namespace: argo-rollouts is NOT declared in aj-infra-platform/namespaces.tf,
+# so this Application creates it — and therefore must label it. An unlabelled
+# namespace is rejected by require-cost-labels and require-segment-label, and
+# Cilium leaves an unselected endpoint unrestricted. See namespaces.tf: the
+# mechanism that installs a component declares its namespace.
+#
+# ⚠ No ECR pull-through override. The images are on quay.io and the estate has
+# pull-through prefixes for dockerhub/ and ghcr/ only. Setting a `quay/` prefix
+# that may not exist would be a guess, and a wrong image path is silent — see
+# the LGTM stack, where two of four had exactly that bug. Left routing direct
+# and recorded here instead.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: product-argo-rollouts
+  namespace: argocd
+spec:
+  generators:
+    - clusters:
+        selector:
+          matchLabels:
+            tier: workload
+            class: product
+        values:
+          env:      "{{metadata.labels.environment}}"
+          autoSync: "{{metadata.labels.auto_sync}}"
+
+  template:
+    metadata:
+      name: "argo-rollouts-{{name}}"
+      namespace: argocd
+      labels:
+        environment: "{{values.env}}"
+        component:   argo-rollouts
+        cluster:     "{{name}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        https://argoproj.github.io/argo-helm
+          chart:          argo-rollouts
+          targetRevision: "2.38.0"
+          helm:
+            releaseName: argo-rollouts
+            # No ignoreMissingValueFiles, deliberately. Values exist for dev,
+            # staging and prod; a cluster whose environment label matches none
+            # of them should fail this sync loudly rather than fall back to
+            # chart defaults, which would quietly drop prod's HA controller to
+            # a single replica.
+            valueFiles:
+              - $values/charts/argo-rollouts/values/{{values.env}}.yaml
+
+        - repoURL:        https://github.com/ajay-infra/aj-gitops
+          targetRevision: v1.0.0
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: argo-rollouts
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        managedNamespaceMetadata:
+          labels:
+            team: infra-core
+            platform.aj/class: platform
+            platform.aj/customer: internal
+            platform.aj/segment: platform
+            app.kubernetes.io/name: argo-rollouts
+            app.kubernetes.io/managed-by: argocd
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m
