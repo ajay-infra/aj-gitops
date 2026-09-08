@@ -62,8 +62,20 @@ spec:
             parameters:
               - name: cluster.name
                 value: "{{name}}"
-              # Route Alloy image through ECR dockerhub/ pull-through cache
-              - name: alloy.image.repository
+              # Route Alloy images through the ECR dockerhub/ pull-through cache.
+              #
+              # k8s-monitoring 2.x has no top-level `alloy` component: it splits
+              # into per-role subcharts (alloy-metrics, alloy-logs,
+              # alloy-receiver, ...). `alloy.image.repository` is the v1 shape,
+              # it matches nothing in v2, and helm drops an unknown --set
+              # silently — so every Alloy pod was pulling from docker.io.
+              # One entry per role this estate enables; alloy-receiver is
+              # disabled in charts/k8s-monitoring/values/_default.yaml.
+              # Verified by render: scripts/render-platform.py asserts each of
+              # these appears in the output.
+              - name: alloy-metrics.image.repository
+                value: "{{values.ecr_registry}}/dockerhub/grafana/alloy"
+              - name: alloy-logs.image.repository
                 value: "{{values.ecr_registry}}/dockerhub/grafana/alloy"
 
         - repoURL: https://github.com/ajay-infra/aj-gitops

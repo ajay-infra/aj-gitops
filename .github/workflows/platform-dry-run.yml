@@ -68,6 +68,7 @@ jobs:
       - name: Render
         run: |
           python3 scripts/render-platform.py \
+            --stack central \
             --hub "${{ matrix.class }}/${{ matrix.tier }}" \
             --central-root .aj-infra-central \
             --kube-version "${{ env.KUBE_VERSION }}" \
@@ -101,5 +102,48 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: rendered-${{ matrix.class }}-${{ matrix.tier }}
+          path: out/dry-run
+          retention-days: 14
+
+  workload:
+    name: workload / ${{ matrix.class }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # product only: no saas cluster Secret is declared, because the saas
+        # class is deferred (aj-infra cluster.yaml `status:`). A saas leg would
+        # select zero clusters and fail on an empty render, which is the right
+        # behaviour from the script and the wrong thing to ask it for. Add the
+        # leg when a saas cluster is declared.
+        class: [product]
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ env.HELM_VERSION }}
+
+      - run: pip install pyyaml
+
+      - name: Render the workload add-ons
+        # Per class, not per hub: these render from the declared cluster
+        # Secrets in clusters/**, which is what the ApplicationSets select on.
+        # Before those existed the generators matched nothing and this tree was
+        # rendered by no check at all.
+        run: |
+          python3 scripts/render-platform.py \
+            --stack workload \
+            --hub "${{ matrix.class }}/nonprod" \
+            --kube-version "${{ env.KUBE_VERSION }}" \
+            --out out/dry-run \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the manifests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rendered-workload-${{ matrix.class }}
           path: out/dry-run
           retention-days: 14

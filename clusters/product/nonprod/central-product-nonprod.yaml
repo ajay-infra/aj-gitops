@@ -1,0 +1,49 @@
+# ArgoCD cluster registration — the hub itself.
+#
+# THIS FILE IS THE THING THAT WAS MISSING. Every ApplicationSet in this repo
+# selects clusters by label, and nothing in the estate created the Secrets those
+# labels live on — so on a real cluster every generator would match zero
+# clusters and the entire GitOps tree would deploy nothing, silently and with a
+# healthy-looking ArgoCD.
+#
+# Declaring it here does three things: the generators have something to match,
+# `scripts/render-platform.py` can render what they produce, and registration on
+# a real cluster becomes `kubectl apply -f` with three values swapped rather
+# than a step nobody had written.
+#
+# ⚠ MOCK values, and exactly which ones:
+#     server   — ArgoCD talks to its own cluster over the in-cluster API, so
+#                https://kubernetes.default.svc is REAL, not a mock.
+#     caData   — mock. Replaced by the cluster's CA on registration.
+#     roleARN  — mock account. See aj-infra/mocks.yaml `666666666666`.
+#     ecr_registry — mock account 555555555555, the registry that
+#                aj-tf-module-ecr would create. Nothing creates it yet.
+#
+# Labels are not decoration. `tier` and `environment` are what
+# applicationsets/central/product/nonprod/lgtm.yaml selects on; `auto_sync` is
+# read into the sync policy; `class` keeps a hub from ever matching the other
+# class's tree.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: central-product-nonprod
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+    tier: central
+    environment: nonprod
+    class: product
+    auto_sync: "true"
+  annotations:
+    ecr_registry: 555555555555.dkr.ecr.us-east-1.amazonaws.com
+type: Opaque
+stringData:
+  name: nonprod-central
+  server: https://kubernetes.default.svc
+  config: |
+    {
+      "tlsClientConfig": {
+        "insecure": false,
+        "caData": "TU9DSyAtLSByZXBsYWNlZCB3aXRoIHRoZSBjbHVzdGVyIENBIG9uIHJlZ2lzdHJhdGlvbg=="
+      }
+    }
