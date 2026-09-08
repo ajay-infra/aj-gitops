@@ -311,9 +311,14 @@ def parse_lgtm(path, cls, tier, repo_root):
             # $values/<path> — the ref source is this repo.
             local = expand(vf, ctx, where).replace("$values/", "")
             full = repo_root / local
-            if not full.is_file():
-                raise Failure(f"{where}: valueFile {local} does not exist")
-            values_files.append(full)
+            if full.is_file():
+                values_files.append(full)
+            elif not helm.get("ignoreMissingValueFiles"):
+                # Honoured in both parsers now. It was handled in the workload
+                # parser and not this one, so a hub ApplicationSet that sets it
+                # failed on a file it had explicitly said was optional.
+                raise Failure(f"{where}: valueFile {local} does not exist and "
+                              f"ignoreMissingValueFiles is not set")
 
         sets, expect = [], []
         for param in helm.get("parameters", []):
@@ -330,7 +335,8 @@ def parse_lgtm(path, cls, tier, repo_root):
         renders.append(Render(
             stack="lgtm",
             hub=f"{cls}/{tier}",
-            name=element["component"],
+            name=f"{path.stem}/{element['component']}" if path.stem != "lgtm"
+                 else element["component"],
             chart=element["chart"],
             repo=expand(element["repoURL"], ctx, where),
             version=str(element["version"]),
@@ -557,13 +563,17 @@ def main():
               f"rendering the bootstrap-argocd.yml declaration only")
         central_root = None
 
-    appsets = sorted((repo_root / "applicationsets/central").glob("*/*/lgtm.yaml"))
+    # Every ApplicationSet in a hub directory, not just lgtm.yaml. The first
+    # version globbed the filename, so adding platform.yaml beside it would have
+    # rendered nothing and reported success — a search narrower than the tree,
+    # which is the failure ci.yml's manifest count guard exists for.
+    appsets = sorted((repo_root / "applicationsets/central").glob("*/*/*.yaml"))
     if not appsets:
-        print("::error::no applicationsets/central/*/*/lgtm.yaml found — refusing "
+        print("::error::no applicationsets/central/*/*/*.yaml found — refusing "
               "to report success on an empty search")
         return 1
 
-    hubs = [(p.parent.parent.name, p.parent.name) for p in appsets]
+    hubs = sorted({(p.parent.parent.name, p.parent.name) for p in appsets})
     if args.hub:
         wanted = set(args.hub)
         hubs = [h for h in hubs if f"{h[0]}/{h[1]}" in wanted]

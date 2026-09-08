@@ -5,7 +5,7 @@
 # runs the same command against the same files, so the manifests in the summary
 # and the artifact are the manifests a hub would apply.
 #
-# Two stacks, four hubs, five renders each:
+# Two stacks, four hubs — nine renders on the active hub, five on the others:
 #   LGTM    applicationsets/central/<class>/<tier>/lgtm.yaml — grafana, loki,
 #           mimir, tempo
 #   Argo    the ArgoCD install itself, declared once by argocd.tf in
@@ -87,9 +87,15 @@ jobs:
           FILES="$(find out/dry-run -name '*.yaml' -type f | sort)"
           COUNT="$(printf '%s\n' "$FILES" | grep -c . || true)"
           echo "validating $COUNT rendered file(s)"
+          # A FLOOR, not an equality: hubs differ. product/nonprod has 9 (4
+          # LGTM + 4 platform add-ons + ArgoCD); the three deferred hubs have 5,
+          # because the platform ApplicationSet is added per hub as each is
+          # activated. This guard catches "the glob matched nothing"; whether
+          # every declared component rendered is the script's job, and it fails
+          # per render.
           if [ "$COUNT" -lt 5 ]; then
-            echo "::error::only $COUNT rendered file(s) for this hub — expected 5"
-            echo "::error::(4 LGTM components + the ArgoCD install)."
+            echo "::error::only $COUNT rendered file(s) for this hub — expected"
+            echo "::error::at least 5 (4 LGTM components + the ArgoCD install)."
             echo "::error::Refusing to report success on a short render."
             exit 1
           fi

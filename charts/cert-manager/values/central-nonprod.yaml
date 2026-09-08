@@ -1,0 +1,15 @@
+# cert-manager — central-product-nonprod
+#
+# crds.enabled is the whole reason this file exists: the chart does NOT install
+# its CRDs by default, and without them every Certificate and Issuer silently
+# has nowhere to go.
+crds:
+  enabled: true
+  keep: true
+
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
