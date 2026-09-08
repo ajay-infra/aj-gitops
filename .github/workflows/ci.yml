@@ -60,7 +60,7 @@ jobs:
         # turned the silent subset into a loud failure, which is the only reason
         # it was noticed. Depth-independent now.
         run: |
-          FILES="$(find applicationsets bootstrap projects -name '*.yaml' -type f | sort)"
+          FILES="$(find applicationsets bootstrap projects clusters -name '*.yaml' -type f | sort)"
           COUNT="$(printf '%s\n' "$FILES" | grep -c . || true)"
           echo "validating $COUNT manifest(s)"
           if [ "$COUNT" -lt 20 ]; then

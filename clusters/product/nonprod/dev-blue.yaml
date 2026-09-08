@@ -1,0 +1,49 @@
+# ArgoCD cluster registration — the dev workload cluster, as seen by the
+# product/nonprod hub.
+#
+# See central-product-nonprod.yaml for why these files exist.
+#
+# ⚠ MOCK values:
+#     server   — a real EKS endpoint has the shape
+#                https://<hex>.gr7.<region>.eks.amazonaws.com. This one is
+#                invented; it is replaced by the cluster's endpoint on
+#                registration.
+#     caData   — mock, replaced on registration.
+#     roleARN  — the hub's ArgoCD pod-identity role, mock account 666666666666
+#                (aj-infra/mocks.yaml). aws_eks_pod_identity_association in
+#                aj-infra-central creates the role; the EKS access entry on this
+#                cluster is what lets it in.
+#     ecr_registry — mock account 555555555555.
+#
+# dev-green is deliberately absent: green_enabled = false in
+# aj-infra/envs/product-clusters/nonprod/dev/vpc.tfvars, so the cluster is
+# declared but not built. Registering a cluster that does not exist would put an
+# Application into permanent Unknown rather than failing loudly.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dev-blue
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: cluster
+    tier: workload
+    environment: dev
+    class: product
+    auto_sync: "true"
+  annotations:
+    ecr_registry: 555555555555.dkr.ecr.us-east-1.amazonaws.com
+type: Opaque
+stringData:
+  name: dev-blue
+  server: https://MOCK0000000000000000000000000000.gr7.us-east-1.eks.amazonaws.com
+  config: |
+    {
+      "awsAuthConfig": {
+        "clusterName": "dev-blue",
+        "roleARN": "arn:aws:iam::666666666666:role/central-product-nonprod-argocd"
+      },
+      "tlsClientConfig": {
+        "insecure": false,
+        "caData": "TU9DSyAtLSByZXBsYWNlZCB3aXRoIHRoZSBjbHVzdGVyIENBIG9uIHJlZ2lzdHJhdGlvbg=="
+      }
+    }
