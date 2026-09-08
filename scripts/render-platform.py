@@ -71,6 +71,25 @@ BUCKET_PREFIX = "central-{cls}-{tier}"
 TEMPLATE_VAR = re.compile(r"\{\{\s*([\w.]+)\s*\}\}")
 
 
+# Renders that cannot succeed yet, and why. Self-expiring: if one of these
+# starts rendering, this script FAILS and names the entry to delete. An
+# exemption list without a staleness check outlives the thing it excused —
+# TRANSITIONAL in aj-infra's check-workflows.py rotted within the hour.
+#
+# Every entry here is a real dependency, not a rendering quirk. The first two
+# are the strongest argument in the estate for provisioning ECR: those
+# ApplicationSets pull their CHARTS, not just their images, through a registry
+# that does not exist — so they would fail on a real cluster exactly as they
+# fail here.
+BLOCKED = {
+    "arc-runners": "chart is oci:// in the ECR registry, which nothing creates yet",
+    "gateway-api-crds": "chart is oci:// in the ECR registry, which nothing creates yet",
+    "cloudability": "chart repo https://apptio.github.io/apptio-cloudability-helm-charts "
+                    "returns 404 — the repository has moved or gone, and the "
+                    "replacement URL is not known. Verified 2026-09-07.",
+}
+
+
 class Failure(Exception):
     pass
 
@@ -116,6 +135,131 @@ class Render:
         self.kinds = {}
         self.images = []
         self.problems = []
+
+
+def load_clusters(repo_root):
+    """The declared ArgoCD cluster Secrets under clusters/**.
+
+    These are what every generator in this repo selects on. Until they existed,
+    the generators matched nothing and this script had to invent the values it
+    could not read.
+    """
+    out = []
+    base = repo_root / "clusters"
+    if not base.is_dir():
+        return out
+    for f in sorted(base.rglob("*.yaml")):
+        doc = load_yaml(f)
+        if not doc or doc.get("kind") != "Secret":
+            continue
+        meta = doc.get("metadata") or {}
+        labels = meta.get("labels") or {}
+        if labels.get("argocd.argoproj.io/secret-type") != "cluster":
+            continue
+        data = doc.get("stringData") or {}
+        out.append({
+            "file": f,
+            "name": data.get("name") or meta.get("name"),
+            "server": data.get("server", ""),
+            "labels": labels,
+            "annotations": meta.get("annotations") or {},
+        })
+    return out
+
+
+def selector_matches(selector, cluster):
+    want = (selector or {}).get("matchLabels") or {}
+    return all(cluster["labels"].get(k) == v for k, v in want.items())
+
+
+def generator_context(gen, cluster):
+    """Resolve a clusters generator's `values:` block against one cluster.
+
+    `{{metadata.labels.environment}}` and `{{metadata.annotations.ecr_registry}}`
+    are read off the Secret rather than mocked — which is the whole point of
+    declaring it.
+    """
+    ctx = {"name": cluster["name"], "server": cluster["server"]}
+    for key, template in ((gen.get("values") or {}).items()):
+        value = str(template)
+        for m in TEMPLATE_VAR.finditer(str(template)):
+            path = m.group(1)
+            if path.startswith("metadata.labels."):
+                value = value.replace(m.group(0), cluster["labels"].get(path.split(".", 2)[2], ""))
+            elif path.startswith("metadata.annotations."):
+                value = value.replace(m.group(0), cluster["annotations"].get(path.split(".", 2)[2], ""))
+        ctx[f"values.{key}"] = value
+    return ctx
+
+
+def parse_workload(path, cls, clusters, repo_root):
+    """One workload ApplicationSet, rendered once per cluster it selects.
+
+    Returns (renders, skipped) — skipped carries a reason, because an
+    ApplicationSet this cannot render must show up in the report rather than
+    silently not appearing in it.
+    """
+    doc = load_yaml(path)
+    if not doc or doc.get("kind") != "ApplicationSet":
+        return [], [(path.name, "not an ApplicationSet")]
+    spec = doc["spec"]
+
+    gens = spec["generators"]
+    if not (len(gens) == 1 and "clusters" in gens[0]):
+        return [], [(path.name, "generator is not a plain clusters generator")]
+    gen = gens[0]["clusters"]
+
+    template = spec["template"]["spec"]
+    sources = template.get("sources") or ([template["source"]] if "source" in template else [])
+    chart_src = next((x for x in sources if "chart" in x), None)
+    if chart_src is None:
+        kind = "path" if any("path" in x for x in sources) else "unknown"
+        return [], [(path.name, f"{kind} source — needs a directory render, not helm template")]
+
+    renders = []
+    for cluster in clusters:
+        if not selector_matches(gen.get("selector"), cluster):
+            continue
+        ctx = generator_context(gen, cluster)
+        where = f"{path} [{cluster['name']}]"
+        helm = chart_src.get("helm", {})
+        release = expand(helm.get("releaseName", path.stem), ctx, where)
+        namespace = expand(str(template["destination"]["namespace"]), ctx, where)
+
+        values_files = []
+        for vf in helm.get("valueFiles", []):
+            local = expand(vf, ctx, where).replace("$values/", "")
+            full = repo_root / local
+            if full.is_file():
+                values_files.append(full)
+            elif not helm.get("ignoreMissingValueFiles"):
+                raise Failure(f"{where}: valueFile {local} does not exist and "
+                              f"ignoreMissingValueFiles is not set")
+
+        sets, expect = [], []
+        for param in helm.get("parameters", []):
+            key = expand(str(param["name"]), ctx, where)
+            val = expand(str(param["value"]), ctx, where)
+            if key == "":
+                continue
+            sets.append((key, val))
+            expect.append((key, val))
+
+        renders.append(Render(
+            stack="workload",
+            hub=f"{cls}/{cluster['name']}",
+            name=path.stem,
+            chart=chart_src["chart"],
+            repo=expand(str(chart_src["repoURL"]), ctx, where),
+            version=str(chart_src["targetRevision"]),
+            namespace=namespace,
+            release=release,
+            values_files=values_files,
+            sets=sets,
+            source=str(path),
+            expect=expect,
+        ))
+    return renders, []
 
 
 def parse_lgtm(path, cls, tier, repo_root):
@@ -337,6 +481,25 @@ def markdown(renders, kube_version, central_root, out_dir):
             f"annotation on the ArgoCD cluster Secret, which does not exist in git.")
         add("")
 
+    workload = [r for r in renders if r.stack == "workload"]
+    if workload:
+        add("## Workload add-ons")
+        add("")
+        add("Rendered per cluster, from the declared cluster Secrets in "
+            "`clusters/**` — the labels these ApplicationSets select on.")
+        add("")
+        add("| Cluster | Add-on | Chart | Values | Manifests | Parameters |")
+        add("|---|---|---|---|---|---:|---|".replace("|---:|---|", "---:|---|"))
+        for r in workload:
+            params = "<br>".join(
+                f"`{k}` = `{v.replace(MOCK_ECR_REGISTRY, '<MOCK ecr>')}`"
+                for k, v in r.sets) or "—"
+            values = ", ".join(p.name for p in r.values_files) or "chart defaults"
+            status = "" if not r.problems else " ⚠️"
+            add(f"| `{r.hub}` | {r.name}{status} | `{r.chart}` {r.version} | "
+                f"`{values}` | {r.manifests} | {params} |")
+        add("")
+
     argocd = [r for r in renders if r.stack == "argocd"]
     if argocd:
         add("## Argo stack")
@@ -376,7 +539,11 @@ def main():
     ap.add_argument("--out", default="out/dry-run", type=Path)
     ap.add_argument("--summary", type=Path, default=None,
                     help="write the markdown report here (e.g. $GITHUB_STEP_SUMMARY)")
-    ap.add_argument("--stack", choices=["lgtm", "argocd", "all"], default="all")
+    ap.add_argument("--stack", default="all",
+                    choices=["lgtm", "argocd", "workload", "central", "all"],
+                    help="`central` is lgtm+argocd — the two hub stacks — so a "
+                         "per-hub CI leg does not also re-render the whole "
+                         "workload tree once per tier")
     ap.add_argument("--hub", action="append", default=None,
                     help="restrict to <class>/<tier>; repeatable")
     ap.add_argument("--helm", default="helm")
@@ -407,13 +574,24 @@ def main():
                   f"{[f'{c}/{t}' for c, t in [(p.parent.parent.name, p.parent.name) for p in appsets]]}")
             return 1
 
-    renders = []
+    clusters = load_clusters(repo_root)
+    if not clusters:
+        print("::warning::no cluster Secrets under clusters/** — workload "
+              "ApplicationSets select on labels that then exist nowhere")
+
+    renders, skipped = [], []
     try:
-        if args.stack in ("lgtm", "all"):
+        if args.stack in ("workload", "all"):
+            for cls in sorted({c for c, _ in hubs}):
+                for appset in sorted((repo_root / "applicationsets/workload" / cls).glob("*.yaml")):
+                    got, miss = parse_workload(appset, cls, clusters, repo_root)
+                    renders += got
+                    skipped += miss
+        if args.stack in ("lgtm", "central", "all"):
             for path in appsets:
                 cls, tier = path.parent.parent.name, path.parent.name
                 renders += parse_lgtm(path, cls, tier, repo_root)
-        if args.stack in ("argocd", "all"):
+        if args.stack in ("argocd", "central", "all"):
             renders += parse_argocd(repo_root, central_root, hubs)
     except Failure as exc:
         print(f"::error::{exc}")
@@ -432,7 +610,38 @@ def main():
             cls, tier = render.hub.split("/")
             check_buckets(render, cls, tier)
 
+    # Blocked renders are expected to fail; a blocked render that SUCCEEDS is
+    # the staleness signal.
+    blocked_hits = []
+    for render in renders:
+        if render.name not in BLOCKED:
+            continue
+        if render.problems:
+            blocked_hits.append((render.name, BLOCKED[render.name]))
+            render.problems = []
+        else:
+            render.problems = [
+                f"BLOCKED lists this as unrenderable ({BLOCKED[render.name]}), "
+                f"but it rendered — delete the entry"]
+
     report = markdown(renders, args.kube_version, central_root, out_dir)
+    if blocked_hits:
+        lines = ["", "### Blocked", "",
+                 "Expected to fail, and failing for the recorded reason. This "
+                 "list fails the check if one of them starts working.", ""]
+        for name, why in sorted(set(blocked_hits)):
+            lines.append(f"- `{name}` — {why}")
+        lines.append("")
+        report += "\n" + "\n".join(lines)
+    if skipped:
+        lines = ["", "### Not rendered", "",
+                 "These ApplicationSets are real and are not covered by this "
+                 "check. Listed rather than omitted, so the report cannot be "
+                 "read as coverage it does not have.", ""]
+        for name, why in skipped:
+            lines.append(f"- `{name}` — {why}")
+        lines.append("")
+        report += "\n" + "\n".join(lines)
     print()
     print(report)
     if args.summary:
