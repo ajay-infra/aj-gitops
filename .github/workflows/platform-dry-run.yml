@@ -5,9 +5,12 @@
 # runs the same command against the same files, so the manifests in the summary
 # and the artifact are the manifests a hub would apply.
 #
-# Two stacks, four hubs — nine renders on the active hub, five on the others:
+# Two stacks, four hubs — ten renders on the active hub, six on the others:
 #   LGTM    applicationsets/central/<class>/<tier>/lgtm.yaml — grafana, loki,
 #           mimir, tempo
+#   CNI     Cilium, installed by aj-infra-central's cilium.tf. Terraform, not
+#           ArgoCD: no ArgoCD pod can schedule before the CNI exists. Rendered
+#           here because validate is the only other check that repo gets.
 #   Argo    the ArgoCD install itself, declared once by argocd.tf in
 #           aj-infra-central. This repo holds what ArgoCD deploys, never what
 #           installs it, so the aj-infra-central checkout below is required
@@ -93,9 +96,9 @@ jobs:
           # activated. This guard catches "the glob matched nothing"; whether
           # every declared component rendered is the script's job, and it fails
           # per render.
-          if [ "$COUNT" -lt 5 ]; then
+          if [ "$COUNT" -lt 6 ]; then
             echo "::error::only $COUNT rendered file(s) for this hub — expected"
-            echo "::error::at least 5 (4 LGTM components + the ArgoCD install)."
+            echo "::error::at least 6 (4 LGTM + ArgoCD + the Cilium CNI)."
             echo "::error::Refusing to report success on a short render."
             exit 1
           fi
