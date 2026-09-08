@@ -65,6 +65,31 @@ MOCK_ECR_REGISTRY = "555555555555.dkr.ecr.us-east-1.amazonaws.com"
 # private and this workflow cannot read it; --kube-version overrides.
 DEFAULT_KUBE_VERSION = "1.35"
 
+# Cilium's real settings come from aj-tf-module-eks's `cilium_helm_values`
+# output, through terraform remote state — which this cannot read, and which
+# holds the hub's pod_cidr from a PRIVATE repo. These mirror that output's shape
+# so the chart renders as it would on the cluster. The pod CIDR is the only
+# value that differs per hub, and it is marked as a mock in the report rather
+# than being presented as the real one.
+#
+# What this render therefore DOES prove: the pinned chart version resolves, the
+# hub's own values file is valid against it, and the two combine without error.
+# What it does NOT prove: that the module's output matches these keys. That
+# holds only as long as aj-tf-module-eks does not change them.
+MOCK_CILIUM_MODULE_VALUES = {
+    "routingMode": "tunnel",
+    "tunnelProtocol": "vxlan",
+    "ipam.mode": "cluster-pool",
+    "ipam.operator.clusterPoolIPv4PodCIDRList[0]": "100.80.0.0/16",  # MOCK
+    "kubeProxyReplacement": "true",
+    "k8sServiceHost": "MOCK.gr7.us-east-1.eks.amazonaws.com",
+    "k8sServicePort": "443",
+    "eni.enabled": "false",
+    "hubble.relay.enabled": "true",
+    "hubble.ui.enabled": "true",
+}
+
+
 # aj-infra-central/locals.tf:  name_prefix = "central-${class}-${tier}"
 BUCKET_PREFIX = "central-{cls}-{tier}"
 
@@ -366,6 +391,44 @@ def argocd_version_from_central(central_root):
     return match.group(1)
 
 
+def cilium_version_from_central(central_root):
+    text = (central_root / "variables.tf").read_text()
+    m = re.search(r'variable\s+"chart_version_cilium"\s*\{[^}]*?default\s*=\s*"([^"]+)"',
+                  text, re.S)
+    if not m:
+        raise Failure("aj-infra-central/variables.tf: no default for chart_version_cilium")
+    return m.group(1)
+
+
+def parse_cilium(central_root, hubs):
+    """The CNI, per hub. Terraform installs it — ArgoCD cannot, because no
+    ArgoCD pod can schedule before it exists — so it is rendered here rather
+    than being the one component nothing checks."""
+    if central_root is None:
+        return []
+    renders = []
+    version = cilium_version_from_central(central_root)
+    for cls, tier in hubs:
+        values = central_root / f"helm-values/cilium/{cls}-{tier}.yaml"
+        if not values.is_file():
+            raise Failure(f"aj-infra-central has no helm-values/cilium/{cls}-{tier}.yaml — "
+                          f"the hub would have no CNI")
+        renders.append(Render(
+            stack="cilium",
+            hub=f"{cls}/{tier}",
+            name="cilium",
+            chart="cilium",
+            repo="https://helm.cilium.io/",
+            version=version,
+            namespace="kube-system",
+            release="cilium",
+            values_files=[values],
+            sets=sorted(MOCK_CILIUM_MODULE_VALUES.items()),
+            source="aj-infra-central/cilium.tf",
+        ))
+    return renders
+
+
 def parse_argocd(repo_root, central_root, hubs):
     """The ArgoCD install, per hub. One declaration: aj-infra-central."""
     if central_root is None:
@@ -506,6 +569,39 @@ def markdown(renders, kube_version, central_root, out_dir):
                 f"`{values}` | {r.manifests} | {params} |")
         add("")
 
+    cilium = [r for r in renders if r.stack == "cilium"]
+    if cilium:
+        add("## CNI")
+        add("")
+        add("Installed by Terraform (`aj-infra-central/cilium.tf`), not by "
+            "ArgoCD — no ArgoCD pod can schedule before the CNI exists. "
+            "Rendered here because `terraform validate` is the only other check "
+            "this repo gets, and validate does not produce manifests.")
+        add("")
+        add("| Hub | Chart | Values | Manifests | hostNetwork pods |")
+        add("|---|---|---|---:|---:|")
+        for r in cilium:
+            host = 0
+            if r.out:
+                host = r.out.read_text().count("hostNetwork: true")
+            values = ", ".join(p.name for p in r.values_files) or "—"
+            status = "" if not r.problems else " ⚠️"
+            add(f"| `{r.hub}`{status} | `{r.chart}` {r.version} | `{values}` | "
+                f"{r.manifests} | {host} |")
+        add("")
+        add("`hostNetwork` is why the ordering works at all: the agent DaemonSet "
+            "schedules without a CNI present, so it can be the thing that "
+            "provides one.")
+        add("")
+        add("⚠ The routing mode, pod CIDR, kube-proxy replacement and API "
+            "endpoint come from `aj-tf-module-eks`'s `cilium_helm_values` via "
+            "remote state, which this cannot read — the hub's `pod_cidr` is in a "
+            "private repo. They are MOCKED here to the shape that output "
+            "produces. This render proves the chart version resolves and the "
+            "hub's values file is valid against it; it does not prove the "
+            "module still emits these keys.")
+        add("")
+
     argocd = [r for r in renders if r.stack == "argocd"]
     if argocd:
         add("## Argo stack")
@@ -546,7 +642,7 @@ def main():
     ap.add_argument("--summary", type=Path, default=None,
                     help="write the markdown report here (e.g. $GITHUB_STEP_SUMMARY)")
     ap.add_argument("--stack", default="all",
-                    choices=["lgtm", "argocd", "workload", "central", "all"],
+                    choices=["lgtm", "argocd", "cilium", "workload", "central", "all"],
                     help="`central` is lgtm+argocd — the two hub stacks — so a "
                          "per-hub CI leg does not also re-render the whole "
                          "workload tree once per tier")
@@ -601,6 +697,8 @@ def main():
             for path in appsets:
                 cls, tier = path.parent.parent.name, path.parent.name
                 renders += parse_lgtm(path, cls, tier, repo_root)
+        if args.stack in ("cilium", "central", "all"):
+            renders += parse_cilium(central_root, hubs)
         if args.stack in ("argocd", "central", "all"):
             renders += parse_argocd(repo_root, central_root, hubs)
     except Failure as exc:
