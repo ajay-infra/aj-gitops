@@ -1,0 +1,131 @@
+# ApplicationSet — the hub's own platform add-ons, central-product-nonprod
+#
+# The hub had none. `platform_module_tag` in aj-infra/versions.yaml exists only
+# under `clusters:`, and no hub env dir has a platform.tfvars, so the central
+# hubs got no add-on layer while every workload cluster got sixteen components.
+#
+# These four are the ones the hub's own configuration already assumes exist:
+#
+#   external-secrets   aj-infra-central's ArgoCD values reference `oidc-secret`
+#                      and `argocd-notifications-secret` and say "created via
+#                      ESO". Nothing was creating them, because ESO was not
+#                      installed.
+#   aws-lbc            the ArgoCD ALB ingress in those same values needs a
+#                      controller to reconcile it. There was none.
+#   cert-manager       TLS for that ingress.
+#   metrics-server     HPA and `kubectl top`; assumed by everything.
+#
+# ── What is NOT here, and why ─────────────────────────────────────────────────
+# Cilium. It is the CNI, so it cannot be deployed by ArgoCD — no ArgoCD pod can
+# schedule before it exists. It is installed by aj-infra-central's cilium.tf,
+# and the order is EKS → Cilium → ArgoCD → this file.
+#
+# ── ⚠ IAM these need, which does not exist yet ────────────────────────────────
+# external-secrets needs secretsmanager:GetSecretValue, aws-lbc needs elasticloadbalancing:*
+# and ec2 describes, cert-manager needs route53 for DNS-01. aj-infra-central
+# creates pod identity associations for argocd and lgtm only. Until those exist
+# these install and then fail to reach AWS — declared here so the gap is
+# visible, rather than being discovered on a cluster.
+#
+# Chart versions match what aj-infra-platform pins for workload clusters, so a
+# hub and a workload cluster run the same builds.
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: central-product-nonprod-addons
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - clusters:
+              selector:
+                matchLabels:
+                  tier: central
+                  environment: nonprod
+                  class: product
+              values:
+                env:          "{{metadata.labels.environment}}"
+                ecr_registry: "{{metadata.annotations.ecr_registry}}"
+                autoSync:     "{{metadata.labels.auto_sync}}"
+
+          - list:
+              elements:
+                - component: external-secrets
+                  chart:     external-secrets
+                  repoURL:   https://charts.external-secrets.io
+                  version:   "0.11.0"
+                  namespace: external-secrets
+
+                - component: aws-load-balancer-controller
+                  chart:     aws-load-balancer-controller
+                  repoURL:   https://aws.github.io/eks-charts
+                  version:   "1.10.0"
+                  namespace: kube-system
+
+                - component: cert-manager
+                  chart:     cert-manager
+                  repoURL:   https://charts.jetstack.io
+                  version:   "v1.16.2"
+                  namespace: cert-manager
+
+                - component: metrics-server
+                  chart:     metrics-server
+                  repoURL:   https://kubernetes-sigs.github.io/metrics-server/
+                  version:   "3.12.2"
+                  namespace: kube-system
+
+  template:
+    metadata:
+      name: "central-{{values.env}}-{{component}}"
+      namespace: argocd
+      annotations:
+        argocd.argoproj.io/sync-options: "Prune=false"
+      labels:
+        environment: "{{values.env}}"
+        component:   "{{component}}"
+    spec:
+      project: platform
+
+      sources:
+        - repoURL:        "{{repoURL}}"
+          chart:          "{{chart}}"
+          targetRevision: "{{version}}"
+          helm:
+            releaseName: "{{component}}"
+            # One file per component, per hub. ignoreMissingValueFiles because
+            # not every component needs one — a component with nothing to
+            # override should not require an empty file to exist.
+            ignoreMissingValueFiles: true
+            valueFiles:
+              - $values/charts/{{component}}/values/central-{{values.env}}.yaml
+
+        - repoURL:        https://github.com/ajay-infra/aj-gitops
+          targetRevision: v1.0.0
+          ref: values
+
+      destination:
+        server:    "{{server}}"
+        namespace: "{{namespace}}"
+
+      syncPolicy:
+        automated:
+          prune:    "{{values.autoSync}}"
+          selfHeal: "{{values.autoSync}}"
+        managedNamespaceMetadata:
+          labels:
+            team: infra-core
+            platform.aj/class: platform
+            platform.aj/customer: internal
+            platform.aj/segment: platform
+            app.kubernetes.io/managed-by: argocd
+        syncOptions:
+          - CreateNamespace=true
+          - ServerSideApply=true
+        retry:
+          limit: 3
+          backoff:
+            duration:    30s
+            factor:      2
+            maxDuration: 5m

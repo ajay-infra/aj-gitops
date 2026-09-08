@@ -1,0 +1,20 @@
+# AWS Load Balancer Controller — central-product-nonprod
+#
+# clusterName is REQUIRED by the chart; it fails to render without it. Read from
+# aj-infra/envs/central/product/nonprod/eks.tfvars `cluster_name`.
+#
+# ⚠ The controller needs an IAM role (elasticloadbalancing:*, ec2 describes) via
+# pod identity. aj-infra-central creates associations for argocd and lgtm only,
+# so this installs and then cannot call AWS until that exists.
+clusterName: nonprod-central
+
+region: us-east-1
+
+# One replica on nonprod. The controller is not in the data path — an outage
+# delays ingress reconciliation, it does not drop traffic.
+replicaCount: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi
