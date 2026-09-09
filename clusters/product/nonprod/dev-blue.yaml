@@ -1,6 +1,19 @@
 # ArgoCD cluster registration — the dev workload cluster, as seen by the
 # product/nonprod hub.
 #
+# THIS FILE IS THE SOURCE OF TRUTH FOR THE SECRET'S LABELS.
+# aj-infra's bootstrap-workload.yml `argocd-register` job reads it and fills in
+# the three values only a live cluster can supply — `server`, `caData` and the
+# `ecr_registry` annotation — then applies the result. It used to build the
+# whole Secret inline from `cluster.yaml`, which meant the labels existed only
+# inside a workflow that has never run, and could not be rendered, diffed or
+# reviewed.
+#
+# aj-infra/scripts/check-cluster-secrets.py asserts this file agrees with
+# `envs/product-clusters/nonprod/dev/cluster.yaml` and with
+# `scripts/auto-sync-for.sh`, so moving the labels here does not move the
+# disagreement here with them.
+#
 # See central-product-nonprod.yaml for why these files exist.
 #
 # ⚠ MOCK values:
@@ -25,11 +38,23 @@ metadata:
   name: dev-blue
   namespace: argocd
   labels:
+    # Selected on by every generator in this repo. class comes from the env
+    # tree (envs/product-clusters/...), environment from the directory name.
     argocd.argoproj.io/secret-type: cluster
     tier: workload
     environment: dev
     class: product
+    # Read into the sync policy, not selected on. Derived by
+    # scripts/auto-sync-for.sh from the cluster's stage — nonprod is not
+    # production, so auto-sync is on. The script fails CLOSED for an
+    # unrecognised stage.
     auto_sync: "true"
+    # Informational: carried so the Secret describes the cluster the same way
+    # cluster.yaml does. No generator selects on these.
+    color: blue
+    kind: product
+    stage: nonprod
+    customer: internal
   annotations:
     ecr_registry: 555555555555.dkr.ecr.us-east-1.amazonaws.com
 type: Opaque
