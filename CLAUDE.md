@@ -445,7 +445,7 @@ its own Secrets — kept because a mis-registration should fail to match rather
 than spread.
 
 **AppProject destinations are `server: "*"`, scoped by the hub.** They used to be
-globs on cluster names (`https://ai-search-dev.*`). The Secret's `server` is the
+globs on cluster names (`https://<cluster>.*`). The Secret's `server` is the
 EKS API endpoint (`https://A1B2C3.gr7.us-east-1.eks.amazonaws.com`), which no
 such glob can match — every Application in the `workloads` project would have
 been rejected at first sync with "destination is not permitted in project". The

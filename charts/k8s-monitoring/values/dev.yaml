@@ -2,8 +2,9 @@
 # Chart: grafana/k8s-monitoring
 # Alloy runs underneath — no separate alloy chart needed.
 
-cluster:
-  name: ai-search-dev
+# cluster.name is NOT set here. The ApplicationSet passes `cluster.name: {{name}}`
+# as a Helm parameter, so every series and log line carries the cluster Secret's
+# name. A value here is overridden; the old one was.
 
 destinations:
   - name: central-mimir
