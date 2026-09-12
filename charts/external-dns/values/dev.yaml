@@ -1,4 +1,4 @@
-# external-dns — dev workload cluster (ai-search-dev)
+# external-dns — dev workload cluster
 # Chart: external-dns/external-dns
 #
 # txtOwnerId is UNIQUE per cluster — do not reuse across clusters.
@@ -26,7 +26,10 @@ domainFilters:
 # TXT registry — external-dns writes a TXT record alongside every A record
 # to track what it owns. Ownership key is txtOwnerId.
 registry: txt
-txtOwnerId: ai-search-dev
+# txtOwnerId is NOT set here. The ApplicationSet passes it as a Helm parameter
+# (`txtOwnerId: {{name}}`, the cluster Secret's name), so each cluster owns its
+# own records and two clusters cannot fight over one zone. A value in this file
+# is overridden and only looks load-bearing — the old value here was.
 
 # Limit to A and TXT — explicitly block all other record types
 managedRecordTypes:

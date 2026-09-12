@@ -2,6 +2,16 @@
 
 All notable changes to this repo are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased] (3)
+
+### Removed
+- **`applications/workload/external-dns-{dev,staging,prod-blue,prod-green}.yaml`** — four standalone `Application`s for external-dns, targeting cluster Secrets named `ai-search-dev`, `ai-search-staging`, `ai-search-prod-blue`, `ai-search-prod-green`. No such Secrets exist (`clusters/` declares `dev-blue` and `central-product-nonprod`), and nothing syncs `applications/` — every bootstrap manifest points at `applicationsets/…`. They were a third declaration of external-dns beside the ApplicationSet and the (now split-off) `aj-infra-platform` release. Dead, and dead in the way that looks alive.
+
+### Fixed
+- **`charts/external-dns/values/dev.yaml` set `txtOwnerId: ai-search-dev`.** The ApplicationSet overrides it with `{{name}}`, so the value never reached a cluster — but a reader would have believed the dev cluster owned records under a name no cluster has. Removed, with the override explained in place.
+- **`charts/k8s-monitoring/values/{_default,dev}.yaml` set `cluster.name: ai-search-dev`.** Same shape: the ApplicationSet passes `cluster.name: {{name}}`. Removed from both.
+- Four `projects/` comments and `CLAUDE.md` used `https://ai-search-dev.*` as the example of the cluster-name glob the `server: "*"` destinations replaced. Now `https://<cluster>.*` — the point was the glob shape, not the name.
+
 ## [Unreleased] (2)
 
 ### Fixed
