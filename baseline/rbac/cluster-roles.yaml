@@ -1,0 +1,343 @@
+# Platform ClusterRoles — four tiers of WHAT can be done, identical on every
+# cluster. Moved here verbatim from aj-infra-rbac/k8s on 2026-09-13
+# (identity-and-access-v1.md §6; that repo is now aj-infra-identity and holds
+# no Kubernetes objects).
+#
+# WHO gets them is not decided here:
+#   - cluster-role-bindings.yaml binds the two estate-wide groups
+#     (estate-read → viewer, estate-infra → deployer)
+#   - the workloads chart renders per-namespace RoleBindings for
+#     team-NNNN-read / team-NNNN-write from the namespace record's `team:`
+#     and the cluster's stage (§6.3) — nothing is hand-written per team
+#
+# Tier summary:
+#   platform-viewer          read-only, no secrets
+#   platform-developer       viewer + exec/portforward + read secrets (own namespace)
+#   platform-deployer        developer + rollout + scale workloads
+#   platform-namespace-admin deployer + manage RBAC/quotas in own namespace only
+#                            — bound to no human group (§6.3); kept for the chart
+#
+# Secrets access:
+#   viewer:          no secrets access (even read is denied by omission)
+#   developer:       get/list secrets in namespace (via RoleBinding, not ClusterRoleBinding)
+#   deployer:        same as developer
+#   namespace-admin: full secret CRUD in namespace
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-viewer
+  labels:
+    rbac.aj-platform.io/tier: viewer
+    app.kubernetes.io/managed-by: argocd
+rules:
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - pods/status
+      - events
+      - nodes
+      - namespaces
+      - services
+      - endpoints
+      - configmaps
+      - persistentvolumeclaims
+      - persistentvolumes
+      - resourcequotas
+      - limitranges
+      - serviceaccounts
+    verbs: [get, list, watch]
+
+  - apiGroups: [apps]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+    verbs: [get, list, watch]
+
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch]
+
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes, gateways, grpcroutes, referencegrants]
+    verbs: [get, list, watch]
+
+  - apiGroups: [keda.sh]
+    resources: [scaledobjects, scaledjobs]
+    verbs: [get, list, watch]
+
+  - apiGroups: [argoproj.io]
+    resources: [rollouts, rollouts/status, analysisruns, experiments]
+    verbs: [get, list, watch]
+
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-developer
+  labels:
+    rbac.aj-platform.io/tier: developer
+    app.kubernetes.io/managed-by: argocd
+rules:
+  # Inherit all viewer permissions
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - pods/status
+      - events
+      - nodes
+      - namespaces
+      - services
+      - endpoints
+      - configmaps
+      - persistentvolumeclaims
+      - persistentvolumes
+      - resourcequotas
+      - limitranges
+      - serviceaccounts
+    verbs: [get, list, watch]
+
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch]
+
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch]
+
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes, gateways, grpcroutes, referencegrants]
+    verbs: [get, list, watch]
+
+  - apiGroups: [keda.sh]
+    resources: [scaledobjects, scaledjobs]
+    verbs: [get, list, watch]
+
+  - apiGroups: [argoproj.io]
+    resources: [rollouts, rollouts/status, analysisruns, experiments]
+    verbs: [get, list, watch]
+
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+
+  # Developer additions: interactive debugging
+  - apiGroups: [""]
+    resources: [pods/exec, pods/portforward]
+    verbs: [create, get]
+
+  # Developer additions: ConfigMap CRUD (app config changes without a deploy)
+  - apiGroups: [""]
+    resources: [configmaps]
+    verbs: [create, update, patch, delete]
+
+  # Secrets: read-only (applied via RoleBinding in namespace, NOT ClusterRoleBinding)
+  # This means developers can read secrets only in their own namespace.
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-deployer
+  labels:
+    rbac.aj-platform.io/tier: deployer
+    app.kubernetes.io/managed-by: argocd
+rules:
+  # All developer permissions
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - pods/status
+      - pods/exec
+      - pods/portforward
+      - events
+      - nodes
+      - namespaces
+      - services
+      - endpoints
+      - configmaps
+      - persistentvolumeclaims
+      - persistentvolumes
+      - resourcequotas
+      - limitranges
+      - serviceaccounts
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list]
+
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [apps]
+    resources:
+      - deployments/scale
+      - statefulsets/scale
+      - replicasets/scale
+    verbs: [get, update, patch]
+
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch]
+
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes, gateways, grpcroutes, referencegrants]
+    verbs: [get, list, watch, create, update, patch]
+
+  - apiGroups: [keda.sh]
+    resources: [scaledobjects, scaledjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [argoproj.io]
+    resources:
+      - rollouts
+      - rollouts/status
+      - rollouts/scale
+      - analysisruns
+      - experiments
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  # Rollout promote/abort/retry
+  - apiGroups: [argoproj.io]
+    resources: [rollouts/finalizers]
+    verbs: [update]
+
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-namespace-admin
+  labels:
+    rbac.aj-platform.io/tier: namespace-admin
+    app.kubernetes.io/managed-by: argocd
+rules:
+  # All deployer permissions
+  - apiGroups: [""]
+    resources:
+      - pods
+      - pods/log
+      - pods/status
+      - pods/exec
+      - pods/portforward
+      - events
+      - nodes
+      - namespaces
+      - services
+      - endpoints
+      - configmaps
+      - persistentvolumeclaims
+      - persistentvolumes
+      - resourcequotas
+      - limitranges
+      - serviceaccounts
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  # Namespace-admin: full secret CRUD (applied via RoleBinding, scoped to own namespace)
+  - apiGroups: [""]
+    resources: [secrets]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [apps]
+    resources: [deployments/scale, statefulsets/scale, replicasets/scale]
+    verbs: [get, update, patch]
+
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [policy]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, networkpolicies]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [gateway.networking.k8s.io]
+    resources: [httproutes, gateways, grpcroutes, referencegrants]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [keda.sh]
+    resources: [scaledobjects, scaledjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [argoproj.io]
+    resources: [rollouts, rollouts/status, rollouts/scale, rollouts/finalizers, analysisruns, experiments]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  # Namespace-admin: manage RBAC within own namespace (but cannot grant cluster-wide access)
+  - apiGroups: [rbac.authorization.k8s.io]
+    resources: [roles, rolebindings]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  - apiGroups: [metrics.k8s.io]
+    resources: [pods, nodes]
+    verbs: [get, list]
+
+  # ExternalSecrets — teams can manage their own ESO resources
+  - apiGroups: [external-secrets.io]
+    resources: [externalsecrets, secretstores]
+    verbs: [get, list, watch, create, update, patch, delete]
