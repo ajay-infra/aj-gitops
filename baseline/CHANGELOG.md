@@ -4,6 +4,16 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Added — `rbac/`
+The four platform ClusterRoles (verbatim from `aj-infra-rbac/k8s`, now
+`aj-infra-identity`, which holds no Kubernetes objects) and the only two
+cluster-scoped human bindings the estate has: `estate-read` → `platform-viewer`,
+`estate-infra` → `platform-deployer` (identity-and-access-v1.md §6.2). Group
+names are the §3 grammar; the old `infra-core` / `infra-readonly` names are
+gone. `platform-argocd-deployer` (ServiceAccounts → cluster-admin) was not
+carried over: the hub reaches workload clusters through its pod-identity role
+and the cluster's access entry, not in-cluster ServiceAccounts.
+
 ### Removed — `namespaces/`
 Namespaces are no longer declared here at all.
 

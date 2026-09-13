@@ -1,0 +1,51 @@
+# The entire cluster-scoped human RBAC in git: two bindings
+# (identity-and-access-v1.md §6.2). Group names are the §3 grammar, verbatim —
+# they arrive from EKS access entries (aj-tf-module-eks `access_groups`,
+# keyed on the Identity Center reserved role in the cluster's own account).
+#
+#   estate-read   → platform-viewer    (read every namespace, no secrets)
+#   estate-infra  → platform-deployer  (deploy anywhere; no RBAC, no quotas)
+#
+# estate-admin and estate-break-glass get AmazonEKSClusterAdminPolicy on their
+# access entry — no ClusterRoleBinding to cluster-admin exists in git, and the
+# rbac-no-cluster-admin-binding constraint (§6.4) keeps it that way.
+#
+# Not carried over from aj-infra-rbac/k8s: `platform-argocd-deployer`, which
+# bound the argocd-* ServiceAccounts to cluster-admin. The hub reaches a
+# workload cluster through its pod-identity role and that cluster's access
+# entry (clusters/*/…yaml awsAuthConfig.roleARN), not through in-cluster
+# ServiceAccounts; on the hub itself the ArgoCD chart owns its RBAC.
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: estate-read-viewer
+  labels:
+    rbac.aj-platform.io/managed-by: platform
+    app.kubernetes.io/managed-by: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-viewer
+subjects:
+  - kind: Group
+    name: estate-read
+    apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: estate-infra-deployer
+  labels:
+    rbac.aj-platform.io/managed-by: platform
+    app.kubernetes.io/managed-by: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-deployer
+subjects:
+  - kind: Group
+    name: estate-infra
+    apiGroup: rbac.authorization.k8s.io
