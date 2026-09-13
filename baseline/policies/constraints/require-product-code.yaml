@@ -4,11 +4,14 @@ metadata:
   name: require-product-code-on-namespaces
   annotations:
     description: >-
-      DRYRUN, deliberately. The estate's namespaces carry team values like
-      "product" and "platform", not product codes — so enforcing this today
-      would reject every one of them. Dryrun reports violations to the audit log
-      without blocking, which is the honest state while the codes are being
-      assigned. Flip to deny once they are.
+      DRYRUN, still — but the exit condition moved. Every namespace record in
+      workloads/registry carries a real code as of 2026-09-12 (team-0002 for
+      the platform namespaces, team-0003 for the product ones). What is not
+      yet confirmed is the namespaces Terraform creates — aj-infra-central's
+      argocd and monitoring, aj-infra-platform's twelve — which take `team`
+      from var.team, now team-0001 in every aj-infra tfvars but still
+      `infra-core` in the modules' own defaults. Flip to deny once those are
+      seen carrying codes in a render.
 spec:
   # Reports, does not block. See the note above — this is a readiness state,
   # not a permanent posture.
@@ -24,21 +27,17 @@ spec:
       - default
       - gatekeeper-system
   parameters:
-    # pim/prd + number. Lives here rather than in the template's Rego so that
-    # correcting the format is a one-line edit with no policy change — a wrong
-    # pattern in an enforcing constraint rejects every namespace it matches.
-    pattern: "^(pim|prd)-?[0-9]+$"
-    # PRODUCT ONLY. `saas` was here and was wrong: SaaS is a different stack
-    # with a different tagging profile, and a per-customer deployment may have
-    # no product code at all — its chargeback key is likely `customer`.
-    #
-    # Applying product's schema to SaaS fails silently rather than loudly: the
-    # tags would be satisfiable with values that mean nothing in a SaaS context,
-    # so they look complete while the cost data is meaningless.
-    #
-    # SaaS stays UNENFORCED until its profile is defined — a known gap beats a
-    # silent one. See aj-infra-context/arch/tag-profiles.md §5.
-    #
-    # Platform and sandbox are overhead, not a product.
+    # team- and four digits, lowercase. The shape only; the closed list is
+    # aj-infra/envs/org/teams.yaml, checked in that repo's CI against every
+    # namespace record here. Lives as a parameter so the shape can change
+    # without a policy change — a wrong pattern in an enforcing constraint
+    # rejects every namespace it matches.
+    pattern: "^team-[0-9]{4}$"
+    # EVERY class. The old pattern was a product code, so it was scoped to
+    # product; a team code is opaque and the same shape everywhere. The
+    # class-specific chargeback keys (Customer, ProductLine) have their own
+    # constraints and are unaffected by this one.
     appliesToClasses:
       - product
+      - saas
+      - platform

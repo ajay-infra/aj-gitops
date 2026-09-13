@@ -15,6 +15,9 @@ somebody can skip.
   {{- fail (printf "segment %q must be one of %v — it selects the CiliumNetworkPolicy, and an endpoint no policy selects is UNRESTRICTED" .Values.segment $segments) }}
 {{- end }}
 {{- if not .Values.team }}{{ fail "team is required" }}{{ end }}
+{{- if not (regexMatch "^team-[0-9]{4}$" .Values.team) }}
+  {{- fail (printf "team %q is not a team code — team- and four digits, a row in aj-infra/envs/org/teams.yaml. Chargeback groups by this label; a slug is a name nobody registered." .Values.team) }}
+{{- end }}
 {{- if not .Values.customer }}
   {{- fail "customer is required — use `internal` or `pooled` rather than leaving it empty, so that ABSENT keeps meaning forgotten" }}
 {{- end }}
