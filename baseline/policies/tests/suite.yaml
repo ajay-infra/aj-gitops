@@ -212,13 +212,15 @@ tests:
         assertions: [{violations: no}]
       - name: descriptive-slug-on-a-product-namespace-is-flagged
         object: samples/ns-cost-bad-team.yaml
-        assertions: [{violations: yes, message: "not a product code"}]
-      - name: platform-namespace-needs-no-product-code
+        assertions: [{violations: yes, message: "not a team code"}]
+      - name: platform-namespace-with-a-team-code-is-allowed
         object: samples/ns-platform-owned.yaml
         assertions: [{violations: no}]
-      - name: saas-namespace-is-out-of-scope
+      - name: saas-namespace-with-a-slug-is-flagged
+        # In scope since 2026-09-12: a team code is opaque, so the shape rule
+        # is the same on every class. This sample's `saas-platform` is a slug.
         object: samples/ns-saas-no-product-code.yaml
-        assertions: [{violations: no}]
+        assertions: [{violations: yes, message: "not a team code"}]
 
 
   # ── product line on SaaS namespaces ───────────────────────────────────────

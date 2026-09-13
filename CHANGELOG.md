@@ -2,6 +2,16 @@
 
 All notable changes to this repo are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased] (4)
+
+### Changed — `team` is a team code, on every class
+`team` was meant to be a product code (`pim`/`prd` + number) on product namespaces only. Nothing defined `pim` or `prd`, no namespace ever carried one, and the constraint sat in dryrun for that reason. Decided 2026-09-12: **`team` is an opaque team code — `team-` and four digits — on every namespace of every class**, and what a code is for lives in `aj-infra/envs/org/teams.yaml` (the portal until RHDH exists), checked there in CI against every record here.
+
+- 30 namespace records: `team: platform` → `team-0002`, `team: product` → `team-0003`.
+- `require-product-code`: pattern `^team-[0-9]{4}$`, `appliesToClasses: [product, saas, platform]`. Still dryrun — the exit condition is now the Terraform-created namespaces (hub `argocd`/`monitoring`, the platform module's twelve), which take `team` from `var.team`. The kind stays `RequireProductCode`; renaming a ConstraintTemplate is a CRD change.
+- `workloads/chart`: a `team` outside the shape fails the render with the row it needs.
+- gator suite: platform is in scope (a code is allowed), saas is in scope (a slug is flagged), samples carry real codes.
+
 ## [Unreleased] (3)
 
 ### Removed

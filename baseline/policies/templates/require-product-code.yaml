@@ -4,12 +4,17 @@ metadata:
   name: requireproductcode
   annotations:
     description: >-
-      The team label must carry a product code (pim/prd + number) on PRODUCT
-      namespaces. SaaS is a separate tagging profile and is deliberately out of
-      scope — see aj-infra-context/arch/tag-profiles.md. Separate from require-cost-labels
-      because the estate's namespaces do not carry real product codes yet, so
-      this ships in dryrun — it reports without blocking until codes are
-      assigned. Enforcing it today would reject every existing namespace.
+      The team label must carry a TEAM CODE — `team-` and four digits — on
+      every namespace of every class. The code is opaque: what it is for lives
+      in aj-infra/envs/org/teams.yaml (the portal), and check-teams.py there
+      fails CI on a code the registry does not know. This template checks the
+      SHAPE, so a slug like `payments-team` is caught at admission; the
+      registry checks MEMBERSHIP, so `team-9999` is caught in CI before it
+      is ever applied. Ships in dryrun until the namespaces Terraform creates
+      (aj-infra-central, aj-infra-platform) are confirmed to carry codes too;
+      the namespace records in workloads/registry all do as of 2026-09-12.
+      The kind is still RequireProductCode: renaming a ConstraintTemplate is
+      a CRD change, and the name is history, not meaning.
 spec:
   crd:
     spec:
@@ -30,15 +35,12 @@ spec:
       rego: |
         package requireproductcode
 
-        # Only namespaces a PRODUCT line pays for need a product code.
-        #
-        # Not SaaS: it is a different stack whose chargeback key is likely
-        # `customer`, and a per-customer deployment may have no product code at
-        # all. Applying product's schema there would be satisfiable with
-        # meaningless values — complete-looking tags over useless data.
-        #
-        # Not platform: cert-manager, monitoring and falcon are overhead, and
-        # forcing a code onto them would invent one purely to satisfy a rule.
+        # Every class, since 2026-09-12. A team code is opaque — it says
+        # nothing about product vs SaaS vs platform, so there is no reason for
+        # the shape rule to differ by class. Class, customer and product line
+        # are their own labels with their own constraints. The earlier
+        # product-only scope existed because the old pattern (pim/prd + number)
+        # was a PRODUCT code; a team code is not.
         violation[{"msg": msg}] {
           cls := input.review.object.metadata.labels["platform.aj/class"]
           applies := object.get(input.parameters, "appliesToClasses", [])
@@ -51,7 +53,7 @@ spec:
 
           name := object.get(input.review.object.metadata, "name", "<unnamed>")
           msg := sprintf(
-            "Namespace '%v' (class %v) has team '%v', which is not a product code. Chargeback groups by this field, so a descriptive slug leaves the spend unattributable to a product. Expected a value matching %v.",
+            "Namespace '%v' (class %v) has team '%v', which is not a team code. Chargeback groups by this field, and a descriptive slug is a name nobody registered. Expected a value matching %v — a row in aj-infra/envs/org/teams.yaml.",
             [name, cls, team, pattern]
           )
         }

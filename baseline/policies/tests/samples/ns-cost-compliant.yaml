@@ -3,6 +3,6 @@ kind: Namespace
 metadata:
   name: payments
   labels:
-    team: prd-1234
+    team: team-0003
     platform.aj/class: product
     platform.aj/customer: internal
