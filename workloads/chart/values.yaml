@@ -14,6 +14,9 @@ namespace: ""
 class: ""
 customer: ""
 cluster: ""
+# The cluster's stage — from the cluster Secret's `stage` label, passed by the
+# ApplicationSet. Chooses what team-NNNN-write may do here (see rbac below).
+stage: ""
 
 # ── From the registry entry ─────────────────────────────────────────────────
 team: ""
@@ -48,3 +51,19 @@ quotas:
 defaultContainerResources:
   requests: { cpu: 50m,  memory: 64Mi }
   limits:   { cpu: "1",  memory: 1Gi }
+
+# ── RBAC — rendered, never authored (identity-and-access-v1.md §6.3) ────────
+# Two RoleBindings per namespace, subjects on the group grammar
+# (`<team>-read`, `<team>-write`), roleRefs to the platform ClusterRoles in
+# baseline/rbac/. The person has one bit of intent per team — look, or change —
+# and the STAGE decides what "change" means. Nobody writes to prod by hand:
+# on prod and prodpciconn the write group binds to the viewer role, and the
+# change arrives through ArgoCD from a merged PR.
+rbac:
+  readRole: platform-viewer
+  writeRoleByStage:
+    nonprod:     platform-developer   # workload CRUD, exec, port-forward, read secrets
+    sandbox:     platform-developer
+    preprod:     platform-deployer    # rollout / rollback / scale, no exec
+    prod:        platform-viewer      # write is read here
+    prodpciconn: platform-viewer

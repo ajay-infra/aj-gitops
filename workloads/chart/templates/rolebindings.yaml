@@ -1,0 +1,41 @@
+{{- include "ns.validate" . -}}
+{{- $write := index .Values.rbac.writeRoleByStage .Values.stage -}}
+# Rendered from the record's `team:` and the cluster's stage. Not authored.
+# identity-and-access-v1.md §6.3.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.team }}-read
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "ns.labels" . | nindent 4 }}
+    platform.aj/access-tier: read
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ .Values.rbac.readRole }}
+subjects:
+  - kind: Group
+    name: {{ .Values.team }}-read
+    apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ .Values.team }}-write
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "ns.labels" . | nindent 4 }}
+    platform.aj/access-tier: write
+  annotations:
+    # What write means on this stage. On prod it is read: nobody writes to
+    # prod by hand (identity-and-access-v1.md §1.4).
+    platform.aj/write-role: {{ $write }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $write }}
+subjects:
+  - kind: Group
+    name: {{ .Values.team }}-write
+    apiGroup: rbac.authorization.k8s.io

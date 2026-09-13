@@ -35,7 +35,7 @@ jobs:
         run: |
           helm lint workloads/chart \
             --set namespace=lint --set cluster=lint --set class=product \
-            --set customer=internal --set team=t --set segment=app --set quota=small
+            --set customer=internal --set team=team-0000 --set segment=app --set quota=small --set stage=nonprod
 
   validate-manifests:
     name: Validate Kubernetes manifests

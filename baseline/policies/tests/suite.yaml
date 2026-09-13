@@ -263,3 +263,49 @@ tests:
       - name: platform-namespace-is-out-of-scope
         object: samples/ns-platform-owned.yaml
         assertions: [{violations: no}]
+
+  # ── RBAC — identity-and-access-v1.md §6.4 ────────────────────────────────
+  - name: rbac-known-groups
+    template: ../templates/rbac-known-groups.yaml
+    constraint: ../constraints/rbac-known-groups.yaml
+    cases:
+      - name: grammar-group-on-a-rolebinding-is-allowed
+        object: samples/rb-team-write.yaml
+        assertions: [{violations: no}]
+      - name: estate-and-system-groups-on-a-clusterrolebinding-are-allowed
+        object: samples/crb-system-group.yaml
+        assertions: [{violations: no}]
+      - name: old-slug-group-is-denied
+        # `<team>-developers` was the pre-2026-09-13 shape; no access entry
+        # produces it any more, so a binding to it grants nothing.
+        object: samples/rb-old-slug-group.yaml
+        assertions: [{violations: yes, message: "no access entry produces"}]
+
+  - name: rbac-no-cluster-admin-binding
+    template: ../templates/rbac-no-cluster-admin-binding.yaml
+    constraint: ../constraints/rbac-no-cluster-admin-binding.yaml
+    cases:
+      - name: the-bootstrap-binding-is-exempt
+        object: samples/crb-bootstrap-cluster-admin.yaml
+        assertions: [{violations: no}]
+      - name: a-viewer-clusterrolebinding-is-allowed
+        object: samples/crb-system-group.yaml
+        assertions: [{violations: no}]
+      - name: serviceaccount-to-cluster-admin-is-denied
+        # The exact object aj-infra-rbac/k8s used to carry.
+        object: samples/crb-cluster-admin.yaml
+        assertions: [{violations: yes, message: "cluster-admin"}]
+
+  - name: rbac-no-wildcards
+    template: ../templates/rbac-no-wildcards.yaml
+    constraint: ../constraints/rbac-no-wildcards.yaml
+    cases:
+      - name: a-narrow-role-is-allowed
+        object: samples/role-narrow.yaml
+        assertions: [{violations: no}]
+      - name: wildcard-verbs-are-denied
+        object: samples/role-wildcard-verbs.yaml
+        assertions: [{violations: yes, message: "verbs"}]
+      - name: granting-rolebindings-is-denied
+        object: samples/role-grants-rolebindings.yaml
+        assertions: [{violations: yes, message: "escalation"}]

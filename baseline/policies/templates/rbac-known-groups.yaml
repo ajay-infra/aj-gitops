@@ -1,0 +1,50 @@
+apiVersion: templates.gatekeeper.sh/v1
+kind: ConstraintTemplate
+metadata:
+  name: rbacknowngroups
+  annotations:
+    description: >-
+      Every Group subject on a RoleBinding or ClusterRoleBinding is a name the
+      group grammar produces (identity-and-access-v1.md §3) or a system:*
+      group. Groups arrive from EKS access entries, which only ever carry
+      grammar names — so a binding to any other Group is a binding nobody can
+      ever satisfy, or a typo that would quietly grant nothing. Either way it
+      is wrong, and it is wrong at admission.
+spec:
+  crd:
+    spec:
+      names:
+        kind: RbacKnownGroups
+      validation:
+        openAPIV3Schema:
+          type: object
+          properties:
+            pattern:
+              type: string
+            allowedPrefixes:
+              type: array
+              items:
+                type: string
+  targets:
+    - target: admission.k8s.gatekeeper.sh
+      rego: |
+        package rbacknowngroups
+
+        violation[{"msg": msg}] {
+          subject := input.review.object.subjects[_]
+          subject.kind == "Group"
+          not known(subject.name)
+          msg := sprintf(
+            "%v '%v' binds Group '%v', which no access entry produces. Groups are team-NNNN-read|write or estate-read|infra|admin|break-glass (identity-and-access-v1.md §3); a binding to anything else grants nothing and hides that it does.",
+            [input.review.object.kind, input.review.object.metadata.name, subject.name]
+          )
+        }
+
+        known(name) {
+          re_match(input.parameters.pattern, name)
+        }
+
+        known(name) {
+          prefix := input.parameters.allowedPrefixes[_]
+          startswith(name, prefix)
+        }
