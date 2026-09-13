@@ -47,7 +47,7 @@ spec:
               # from the day it was written, so one merge reached every cluster
               # at once with no staged rollout — the exact property the pins
               # exist to prevent.
-              revision: v1.0.0
+              revision: v1.1.0
               files:
                 - path: "workloads/registry/*/*/*/*/namespace.yaml"
           - clusters:
@@ -78,7 +78,7 @@ spec:
 
       sources:
         - repoURL: https://github.com/ajay-infra/aj-gitops
-          targetRevision: v1.0.0
+          targetRevision: v1.1.0
           path: workloads/chart
           helm:
             releaseName: "ns-{{index .path.segments 5}}"
@@ -103,7 +103,7 @@ spec:
               - $values/{{.path.path}}/namespace.yaml
 
         - repoURL: https://github.com/ajay-infra/aj-gitops
-          targetRevision: v1.0.0
+          targetRevision: v1.1.0
           ref: values
 
       destination:

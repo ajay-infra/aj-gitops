@@ -2,7 +2,12 @@
 
 All notable changes to this repo are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased] (4)
+## [v1.1.0] — 2026-09-13
+
+Tagged on 1e2f3c5. The three Unreleased blocks below are what v1.1.0 carries
+over v1.0.0; headings kept as written.
+
+### (4)
 
 ### Changed — `team` is a team code, on every class
 `team` was meant to be a product code (`pim`/`prd` + number) on product namespaces only. Nothing defined `pim` or `prd`, no namespace ever carried one, and the constraint sat in dryrun for that reason. Decided 2026-09-12: **`team` is an opaque team code — `team-` and four digits — on every namespace of every class**, and what a code is for lives in `aj-infra/envs/org/teams.yaml` (the portal until RHDH exists), checked there in CI against every record here.
