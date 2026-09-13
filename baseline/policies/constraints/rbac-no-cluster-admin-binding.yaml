@@ -1,0 +1,18 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RbacNoClusterAdminBinding
+metadata:
+  name: rbac-no-cluster-admin-binding
+  annotations:
+    description: >-
+      Deny. The only exemption is the binding the API server itself creates
+      at bootstrap (cluster-admin -> system:masters); everything else is a
+      choice, and this is the choice the estate does not make.
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        kinds: ["ClusterRoleBinding"]
+  parameters:
+    exemptNames:
+      - cluster-admin

@@ -24,6 +24,57 @@ import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent
+REPO = HERE.parent
+
+GROUP_RE = re.compile(r"^team-[0-9]{4}-(read|write)$")
+# identity-and-access-v1.md §6.3 — what the write group may bind to, per stage.
+# Mirrors chart/values.yaml rbac.writeRoleByStage; a drift between the two is
+# exactly what this check exists to catch.
+WRITE_ROLE = {"nonprod": "platform-developer", "sandbox": "platform-developer",
+              "preprod": "platform-deployer", "prod": "platform-viewer", "prodpciconn": "platform-viewer"}
+STRICTEST = "prodpciconn"
+
+
+def cluster_stages() -> dict:
+    """cluster name -> stage, from the cluster Secrets' labels.
+
+    The ApplicationSet passes the Secret's `stage` label to the chart, so the
+    Secret is the source here too. A cluster with records but no Secret gets
+    STRICTEST: ArgoCD would generate nothing for it, and rendering it as prod
+    cannot hide a binding that would be wrong on prod.
+    """
+    out = {}
+    for f in sorted((REPO / "clusters").rglob("*.yaml")):
+        text = f.read_text()
+        if "argocd.argoproj.io/secret-type: cluster" not in text:
+            continue
+        name = re.search(r"^\s+name:\s*(\S+)", text, re.M)
+        stage = re.search(r"^\s+stage:\s*(\S+)", text, re.M)
+        env = re.search(r"^\s+environment:\s*(\S+)", text, re.M)
+        if env and stage:
+            out[env.group(1)] = stage.group(1)
+    return out
+
+
+def check_rbac(entry: Path, rendered: str, team: str, stage: str, problems: list) -> None:
+    """Detector 4 (identity-and-access-v1.md §9): the two RoleBindings the chart
+    rendered are the two the design says, and write never exceeds the stage."""
+    docs = [d for d in rendered.split("\n---") if "kind: RoleBinding" in d]
+    rel = entry.relative_to(HERE)
+    if len(docs) != 2:
+        problems.append(f"{rel}: {len(docs)} RoleBinding(s) rendered, expected exactly 2 (read, write)")
+        return
+    seen = {}
+    for d in docs:
+        subj = re.search(r"kind: Group\n\s+name:\s*(\S+)", d)
+        role = re.search(r"kind: ClusterRole\n\s+name:\s*(\S+)", d)
+        if not subj or not GROUP_RE.match(subj.group(1)):
+            problems.append(f"{rel}: RoleBinding subject {subj.group(1) if subj else '<none>'!r} is not on the group grammar")
+            continue
+        seen[subj.group(1)] = role.group(1) if role else None
+    want = {f"{team}-read": "platform-viewer", f"{team}-write": WRITE_ROLE[stage]}
+    if seen != want:
+        problems.append(f"{rel} (stage {stage}): bindings are {seen}, expected {want}")
 
 
 def run(cmd, **kw):
@@ -84,17 +135,25 @@ def main() -> int:
     for e in entries:
         by_cluster.setdefault(e.parts[-3], []).append(e)
 
-    blocking, reporting, rendered = [], [], 0
+    stages = cluster_stages()
+    blocking, reporting, rendered, rbac_problems = [], [], 0, []
     for cluster in sorted(by_cluster):
+        stage = stages.get(cluster)
+        if stage is None:
+            print(f"note  {cluster}: no cluster Secret — rendered as {STRICTEST} (strictest); ArgoCD generates nothing for it")
+            stage = STRICTEST
         parts = list(policy_docs)
         for entry in by_cluster[cluster]:
             cls, tenant, _, ns = entry.parts[-5:-1]
             r = run(["helm", "template", ns, str(HERE / "chart"), "-f", str(entry),
                      "--set", f"namespace={ns}", "--set", f"class={cls}",
-                     "--set", f"customer={tenant}", "--set", f"cluster={cluster}"])
+                     "--set", f"customer={tenant}", "--set", f"cluster={cluster}",
+                     "--set", f"stage={stage}"])
             if r.returncode != 0:
                 print(f"FAIL  {entry.relative_to(HERE)} does not render\n{r.stderr.strip()}")
                 return 1
+            team = re.search(r"^team:\s*(\S+)", entry.read_text(), re.M)
+            check_rbac(entry, r.stdout, team.group(1) if team else "", stage, rbac_problems)
             parts.append(r.stdout)
             rendered += 1
 
@@ -127,6 +186,13 @@ def main() -> int:
             print(f"  {l}")
         return 1
 
+    if rbac_problems:
+        print(f"\nFAIL — {len(rbac_problems)} RoleBinding(s) not what §6.3 derives:")
+        for l in rbac_problems:
+            print(f"  {l}")
+        return 1
+
+    print("PASS — every namespace renders exactly its two RoleBindings, write never exceeds the stage")
     print("\nPASS — nothing that would block admission")
     return 0
 

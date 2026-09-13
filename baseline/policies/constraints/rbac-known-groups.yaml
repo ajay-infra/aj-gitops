@@ -1,0 +1,23 @@
+apiVersion: constraints.gatekeeper.sh/v1beta1
+kind: RbacKnownGroups
+metadata:
+  name: rbac-known-groups
+  annotations:
+    description: >-
+      Deny from day one: nothing pre-existing binds an off-grammar Group, so
+      there is nothing to grandfather (identity-and-access-v1.md §6.4).
+spec:
+  enforcementAction: deny
+  match:
+    kinds:
+      - apiGroups: ["rbac.authorization.k8s.io"]
+        kinds: ["RoleBinding", "ClusterRoleBinding"]
+    excludedNamespaces:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - gatekeeper-system
+  parameters:
+    pattern: "^(team-[0-9]{4}-(read|write)|estate-(read|infra|admin|break-glass))$"
+    allowedPrefixes:
+      - "system:"

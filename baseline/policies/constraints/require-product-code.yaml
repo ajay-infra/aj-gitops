@@ -4,18 +4,17 @@ metadata:
   name: require-product-code-on-namespaces
   annotations:
     description: >-
-      DRYRUN, still — but the exit condition moved. Every namespace record in
-      workloads/registry carries a real code as of 2026-09-12 (team-0002 for
-      the platform namespaces, team-0003 for the product ones). What is not
-      yet confirmed is the namespaces Terraform creates — aj-infra-central's
-      argocd and monitoring, aj-infra-platform's twelve — which take `team`
-      from var.team, now team-0001 in every aj-infra tfvars but still
-      `infra-core` in the modules' own defaults. Flip to deny once those are
-      seen carrying codes in a render.
+      DENY as of 2026-09-13. Every namespace record in workloads/registry
+      carries a team code, and a namespace without one now has no RBAC — the
+      workloads chart renders the two RoleBindings from `team`, so a missing
+      code is a security gap, not a label gap (identity-and-access-v1.md
+      §6.4). The Terraform-created namespaces (aj-infra-central's argocd and
+      monitoring, aj-infra-platform's twelve) take `team` from var.team,
+      team-0001 in every aj-infra tfvars; the modules' own defaults are still
+      `infra-core` and are the next thing to fix — a module run on its default
+      would now be refused, which is the point.
 spec:
-  # Reports, does not block. See the note above — this is a readiness state,
-  # not a permanent posture.
-  enforcementAction: dryrun
+  enforcementAction: deny
   match:
     kinds:
       - apiGroups: [""]

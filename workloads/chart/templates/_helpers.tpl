@@ -6,6 +6,10 @@ somebody can skip.
 {{- define "ns.validate" -}}
 {{- if not .Values.namespace }}{{ fail "namespace is required — it is the last path segment" }}{{ end }}
 {{- if not .Values.cluster }}{{ fail "cluster is required — it is the third path segment" }}{{ end }}
+{{- if not .Values.stage }}{{ fail "stage is required — the cluster Secret's `stage` label, passed by the ApplicationSet; it decides what the team's write group may do here" }}{{ end }}
+{{- if not (hasKey .Values.rbac.writeRoleByStage .Values.stage) }}
+  {{- fail (printf "stage %q is not one of %v" .Values.stage (keys .Values.rbac.writeRoleByStage)) }}
+{{- end }}
 {{- $classes := list "platform" "product" "saas" "sandbox" }}
 {{- if not (has .Values.class $classes) }}
   {{- fail (printf "class %q must be one of %v" .Values.class $classes) }}

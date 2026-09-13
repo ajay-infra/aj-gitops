@@ -4,6 +4,17 @@ All notable changes to this repo are documented here. Format loosely follows [Ke
 
 ## [Unreleased]
 
+### Added — three RBAC constraints, all `deny` (identity-and-access-v1.md §6.4)
+`rbac-known-groups` (a Group subject must be on the grammar or `system:*`),
+`rbac-no-cluster-admin-binding` (only the bootstrap binding may reference
+`cluster-admin`), `rbac-no-wildcards` (a namespaced Role may not use `*` or
+grant roles/rolebindings). Nine gator cases, both directions.
+
+### Changed — `require-product-code` is `deny`
+A namespace without a team code now has no RBAC (the workloads chart renders
+the RoleBindings from `team`), so the missing code is a security gap. The
+modules' `var.team` defaults (`infra-core`) would now be refused — deliberately.
+
 ### Added — `rbac/`
 The four platform ClusterRoles (verbatim from `aj-infra-rbac/k8s`, now
 `aj-infra-identity`, which holds no Kubernetes objects) and the only two

@@ -92,6 +92,13 @@ spec:
                 value: "{{index .path.segments 3}}"
               - name: cluster
                 value: "{{index .path.segments 4}}"
+              # The cluster Secret's stage label. The chart renders the
+              # namespace's two RoleBindings from `team` + this: what
+              # team-NNNN-write may do is a property of the stage, not the
+              # person (identity-and-access-v1.md §6.3). missingkey=error above
+              # makes a Secret without the label fail generation, loudly.
+              - name: stage
+                value: "{{.metadata.labels.stage}}"
             valueFiles:
               - $values/{{.path.path}}/namespace.yaml
 
