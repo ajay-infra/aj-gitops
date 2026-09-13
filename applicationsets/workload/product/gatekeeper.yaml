@@ -72,7 +72,7 @@ spec:
                 value: "{{values.ecr_registry}}/dockerhub/openpolicyagent/gatekeeper"
 
         - repoURL:        https://github.com/ajay-infra/aj-gitops
-          targetRevision: v1.0.0
+          targetRevision: v1.1.0
           ref: values
 
       destination:

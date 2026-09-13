@@ -2,7 +2,7 @@
 
 All notable changes to this repo are documented here. Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [v1.1.0] — 2026-09-13
 
 ### Added — three RBAC constraints, all `deny` (identity-and-access-v1.md §6.4)
 `rbac-known-groups` (a Group subject must be on the grammar or `system:*`),

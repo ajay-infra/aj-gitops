@@ -55,7 +55,7 @@ spec:
 
       source:
         repoURL:        https://github.com/ajay-infra/aj-gitops
-        targetRevision: v1.0.0
+        targetRevision: v1.1.0
         # The baseline is a DIRECTORY in aj-gitops now, not a repo. Without
         # this path the sync would recurse the entire monorepo — including
         # every ApplicationSet, which ArgoCD would then try to apply to a
